@@ -40,12 +40,13 @@ OUT = ROOT / "docs" / "data.json"
 OUT_JS = ROOT / "docs" / "data.js"
 
 # --- Analysis window -------------------------------------------------------
-# The GA4 extracts arrived without a stated date range. We assume they align to
-# the trailing 90 days and slice the sales data to match. If the GA4 window is
-# confirmed to be different, change these two dates and re-run.
-WINDOW_START = pd.Timestamp("2026-06-25")
-WINDOW_END = pd.Timestamp("2026-09-22")
-AS_OF = pd.Timestamp("2026-09-23")
+# Set in config/config.json. The PRD specifies a trailing 30 days; the GA4
+# extracts arrived without a stated range and are assumed to match it.
+_CFG = json.loads((ROOT / "config" / "config.json").read_text())
+WINDOW_END = pd.Timestamp(_CFG["window"]["end"])
+WINDOW_START = WINDOW_END - pd.Timedelta(days=_CFG["window"]["days"] - 1)
+AS_OF = WINDOW_END
+NEW_ARRIVAL_DAYS = _CFG["new_arrival_days"]
 
 # Peer groups smaller than this fall back to the page-wide benchmark for M6.
 # With a 3-SKU peer group every member sits within a rupee or two of its own
@@ -181,6 +182,13 @@ def build() -> dict:
     # history. Flagged so the viewer can route it to the cold-start default
     # instead of scoring it at zero.
     df["is_new"] = df["created"] > WINDOW_START
+    # PRD slot N: launched within `new_arrival_days` of the window end.
+    df["is_new_arrival"] = df["created"] > (WINDOW_END - pd.Timedelta(days=NEW_ARRIVAL_DAYS))
+
+    # Stock status is not in any extract yet. Defaulting to in-stock keeps the
+    # pipeline running; the viewer flags that the three stock rules are untested.
+    if "in_stock" not in df:
+        df["in_stock"] = True
 
     # ---- Peer median price (M6 benchmark) ---------------------------------
     # Median, not mean: one Rs 45,045 SKU drags the Bunches mean to Rs 2,395
@@ -211,6 +219,8 @@ def build() -> dict:
             "peerMedian": float(peer_median.get(r.peer_group, page_median)),
             "onPage": bool(r.on_page),
             "isNew": bool(r.is_new),
+            "isNewArrival": bool(r.is_new_arrival),
+            "inStock": bool(r.in_stock),
             "bestSeller": int(r.best_seller),
             "created": r.created.strftime("%Y-%m-%d") if pd.notna(r.created) else None,
             "currentIndex": int(r.current_index) if pd.notna(r.current_index) else None,
@@ -244,7 +254,9 @@ def build() -> dict:
             "peerMedians": {k: float(v) for k, v in peer_median.items()},
             "peerCounts": live["peer_group"].value_counts().to_dict(),
             "minPeerGroup": MIN_PEER_GROUP,
-            "defaultWeights": {"A": 0.45, "B": 0.25, "C": 0.20, "D": 0.10, "E": 1.40, "F": 1.40},
+            "config": _CFG,
+            "stockDataAvailable": False,
+            "newArrivalCount": int(df["is_new_arrival"].sum()),
         },
         "products": records,
     }

@@ -1,0 +1,56 @@
+{
+  "_comment": "Everything the category team can change without a deploy. Requirement 8.",
+
+  "window": {
+    "days": 30,
+    "end": "2026-09-22",
+    "_note": "PRD specifies the trailing 30 days. Sales data currently ends 22 Sep 2026, so the window is the last 30 days of available data, not of the calendar. Move `end` forward when fresher extracts land."
+  },
+
+  "weights": {
+    "ctr": 0.35,
+    "atc_pdp": 0.25,
+    "conversion": 0.20,
+    "orders": 0.20
+  },
+
+  "smoothing_k": 3000,
+
+  "price_bands": {
+    "M": { "min": 750, "max": 1200, "label": "Medium" },
+    "H": { "min": 1201, "max": null, "label": "High" }
+  },
+
+  "new_arrival_days": 30,
+
+  "templates": {
+    "batch_1": ["M", "M", "H", "M", "F", "M", "N", "M", "H", "M"],
+    "batch_2": ["M", "M", "H", "M", "F", "M", "N", "M", "H", "M"],
+    "batch_default": ["M", "M", "H", "M", "F", "M", "N", "M", "M", "M"]
+  },
+
+  "fallback_chain": {
+    "_comment": "When a slot's pool is exhausted, try these in order. Keeps the strict price band governing the top of the page while guaranteeing every SKU gets placed. Requirement 4, extended.",
+    "M": ["M", "LOW", "H"],
+    "H": ["H", "M", "LOW"],
+    "N": ["N", "M", "LOW", "H"],
+    "F": ["F", "M", "LOW", "H"]
+  },
+
+  "boost_list": {
+    "_comment": "F slot. SKU GUIDs, manually curated by the category team. Empty list means F falls back per fallback_chain (requirement 7).",
+    "guids": []
+  },
+
+  "manual_new": {
+    "_comment": "N slot. GUIDs force-treated as new arrivals regardless of launch date, so the team can seed the N pool when genuine launches run dry. Merged with the automatic last-30-days pool.",
+    "guids": []
+  },
+
+  "rules": {
+    "exclude_out_of_stock_from_top_n": 10,
+    "out_of_stock_to_end": true,
+    "f_slot_stable_within_session": true,
+    "reserve_boost_for_f": true
+  }
+}

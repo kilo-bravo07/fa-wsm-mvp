@@ -1,62 +1,98 @@
-# Weighted Sequence Model — FlowerAura `/all-flowers`
+# Listing Page Sequencing — FlowerAura `/all-flowers`
 
-An MVP of the Weighted Sequence Model (WSM), ported from Bakingo to the FlowerAura
-flowers listing page. It replaces static product sorting with a score computed from
-behavioural and sales data, and lets a reviewer move the weights and watch the
-sequence respond.
+An MVP of the listing-page sequencing algorithm: products are scored on four
+behavioural signals, then dealt into a repeating ten-slot template that holds a price
+mix, a new-arrival seat and a featured seat. Every weight, band and slot is editable in
+the browser so a reviewer can see the page re-sequence live.
 
-**[Open the viewer →](https://YOUR-ORG.github.io/fa-wsm-mvp/)**
-*(replace with the Pages URL once published)*
+**[Open the viewer →](https://kilo-bravo07.github.io/fa-wsm-mvp/)**
+
+The earlier Weighted Sequence Model port (the Bakingo six-metric design) is kept at
+[`docs/wsm-v1.html`](docs/wsm-v1.html) for reference. This page supersedes it.
 
 ---
 
-## What the model does
+## Step 1 — Score
 
-Every product gets a Rank Score. Higher scores rank earlier on the page.
+| Signal | Definition | Weight |
+|---|---|---|
+| Click-through rate | PLP clicks ÷ PLP impressions | 35% |
+| Add-to-cart PDP rate | PDP add-to-cart ÷ PDP views | 25% |
+| Conversion rate (SKU) | orders ÷ PLP clicks | 20% |
+| Overall SKU orders | order count | 20% |
+
+Each signal is normalised 0–1 across the page before weighting. Rates are smoothed
+toward the site average first.
+
+## Step 2 — Slots
+
+The page is dealt in batches of ten. Each position asks for a slot type, and the type
+takes the highest-scoring unplaced product from its pool.
+
+| Slot | Rule |
+|---|---|
+| **M** Medium | price ₹750–1200, highest score |
+| **H** High | price above ₹1200, highest score |
+| **N** New arrival | launched in the last 30 days, highest score |
+| **F** Featured | drawn from the manual boost list |
 
 ```
-S1 = M1·A + M2·B + M3·C + M4·D
-S2 = S1 · E      if the recency condition holds
-RS = S2 · F      if the price condition holds
+Batch 1    M M H M F M N M H M
+Batch 2    M M H M F M N M H M
+Batch 3+   M M H M F M N M M M
 ```
 
-| | Metric | Definition | Default weight | Source |
-|---|---|---|---|---|
-| M1 | PLP click-through rate | PLP clicks ÷ PLP views | A = 45% | GA4 / BigQuery |
-| M2 | PLP add-to-cart rate | PLP ATC ÷ PLP clicks | B = 25% | GA4 / BigQuery |
-| M3 | Order share | SKU orders ÷ all flower orders | C = 20% | Internal DB |
-| M4 | PDP add-to-cart rate | PDP ATC ÷ PDP views | D = 10% | GA4 / BigQuery |
-| M5 | Recency modifier | ordered within the recency window | E = ×1.40 | Internal DB |
-| M6 | Price modifier | price vs. peer-group median | F = ×1.40 | Internal DB |
+## Step 3 — The rest
 
-## What the data says
+The same template continues to the end of the catalogue. Out-of-stock products are
+barred from the top 10 and sink to the page tail.
 
-Measured over 240 products, 4.06M PLP impressions and 52,802 attributed orders.
+---
 
-**The current sequence is uncorrelated with performance.** Position predicts
-impressions strongly (Spearman ρ = −0.41) but has no significant relationship with
-click-through rate (ρ = 0.07, p = 0.31). Products are ordered, but not by anything
-that predicts whether a customer wants them.
+## The fallback chain
 
-**36% of the page's impressions return 4% of its orders.** Eighteen products draw
-more than 30,000 impressions each while converting below half the page average.
-`Harmonious Veil Of Dried Blooms` needs 7,189 impressions to produce one order
-against a page average of 77. Meanwhile `Blossoming Whispers Of Love` needs 5 — and
-sits at position 202.
+The PRD's slot rules don't produce enough products to fill the seats they ask for, so
+every slot falls through an ordered chain when its own pool empties. Measured on the
+current 240-SKU catalogue:
 
-**Add-to-cart rate rises monotonically with depth**, from 13.2% in positions 1–20 to
-23.7% in positions 101–150. The products that convert best once clicked are the ones
-almost nobody reaches.
+| Slot | Products available | Seats wanted | Short by |
+|---|---|---|---|
+| M (₹750–1200) | 56 | 166 | **110** |
+| H (>₹1200) | 125 | 26 | — |
+| N (last 30 days) | 12 | 24 | **12** |
+| F (boost list) | 0 | 24 | **24** |
+| LOW (<₹750) | 58 | 0 | — |
+
+Two things to note. **58 products priced below ₹750 belong to no band the PRD names** —
+without a fallback they could never be placed at all. And the strict ₹750–1200 M band
+qualifies only 56 products against 166 M seats.
+
+The chain (`M → LOW → H`, `H → M → LOW`, `N` and `F → M → LOW → H`) resolves both: the
+strict band governs the top of the page, where the price mix actually matters, and every
+product still lands exactly once. It is a config value, not a hard-coded rule.
+
+## Two behaviours worth knowing
+
+**Boosted products are reserved for F seats.** Without this, an M slot takes a boosted
+SKU before its F seat comes round — the boost buys nothing and the F seat falls back to
+an ordinary product. Set `rules.reserve_boost_for_f` to `false` to disable.
+
+**The F pick is deterministic.** Requirement 6 asks for the slot to be stable within a
+session, so the "random" draw from the boost list uses a fixed seed rather than
+`Math.random()`.
+
+---
 
 ## Repository layout
 
 ```
-src/build_dataset.py   joins the five source extracts -> docs/data.{json,js}
-src/wsm.py             reference scorer; the authoritative definition of the maths
-docs/index.html        the viewer (GitHub Pages serves this directory)
-docs/data.js           generated model input, one record per SKU
-tests/test_parity.py   join-integrity checks + Python/JavaScript scorer parity
-data/                  source extracts (see data/README.md)
+config/config.json       weights, bands, template, fallback chain, boost + manual-new lists
+src/sequence.py          reference scorer and slot allocator — authoritative maths
+src/build_dataset.py     joins the five extracts -> docs/data.{json,js}
+docs/index.html          the viewer (GitHub Pages serves /docs)
+docs/wsm-v1.html         the superseded Weighted Sequence Model viewer
+tests/test_sequence.py   PRD requirement checks + Python/JavaScript parity
+data/                    source extracts (see data/README.md)
 ```
 
 ## Running it
@@ -64,93 +100,55 @@ data/                  source extracts (see data/README.md)
 ```bash
 pip install -r requirements.txt
 python src/build_dataset.py      # regenerates docs/data.json and docs/data.js
-python -m pytest tests/ -q       # join checks + scorer parity (needs node)
+python -m pytest tests/ -q       # requirement checks + parity (needs node)
 open docs/index.html             # works from the filesystem, no server needed
 ```
 
-To publish: **Settings → Pages → Deploy from branch → `main` / `/docs`**.
+Publishing: **Settings → Pages → Deploy from branch → `main` / `/docs`**.
 
-> **Make the repository private.** `data/sales.csv` is 15 MB of order-level data
-> (order IDs, dates, line prices, order totals — no customer PII, but full revenue
-> detail) and `docs/data.js` carries per-product revenue. Neither belongs on a public
-> URL. If stakeholders need a public link, delete `data/` from the repo and commit
-> only `docs/` — the viewer runs entirely off `docs/data.js` and needs nothing else.
+> `data/*.csv` is excluded from the repository — it contains order-level revenue data.
+> The viewer runs entirely off `docs/`.
 
-## Decisions this implementation makes
+## Requirements coverage
 
-The spec left several things open. Each is implemented as a live control in the
-viewer rather than a hard-coded choice, so the review can settle them.
+| # | Requirement | Status |
+|---|---|---|
+| 1 | Score refreshes on a schedule | Config value; the MVP recomputes on load |
+| 2 | A product appears only once | Tested |
+| 3 | Out-of-stock never in the top 10 | Implemented, tested with synthetic stock data |
+| 4 | Empty pool fills from elsewhere | Implemented as the fallback chain, tested |
+| 5 | Boost list editable by the category team | Editable in the viewer and in `config.json` |
+| 6 | F pick stable within a session | Deterministic seed |
+| 7 | Empty boost list falls back | Tested |
+| 8 | Template, bands and weights configurable | All live in the viewer |
+| 9 | Served from cache, no slowdown | Out of scope for the MVP |
 
-**Normalisation.** M1–M4 are rates on wildly different scales — page CTR runs near
-1.6%, ATC rate near 18%, order share near 0.09%. Summing them raw would let one
-metric dominate through its units alone. Each is mapped to 0–1 across the page
-before weighting. Min–max is the default; percentile rank is more robust when a
-single outlier compresses everyone else.
+## Known gaps
 
-**Smoothing.** A product with 5 clicks and 2 add-to-carts shows a 40% ATC rate.
-Unsmoothed, it outranks genuinely strong products on noise alone. Each ratio is
-shrunk toward the page's pooled rate in proportion to how little traffic supports
-it. Set smoothing to Off in the viewer to see what the unguarded model would do.
+**Stock status is not in any extract.** Every product is treated as in stock, so the
+three stock rules are implemented and unit-tested against synthetic data but unverified
+against production. A `GUID, in_stock` column activates them.
 
-**Cold start.** 50 of 240 products were created after the analysis window opened.
-Scoring them at zero would bury them permanently — a self-fulfilling prophecy — so
-they take the median score of established products until they accumulate history.
+**The GA4 window is unconfirmed.** The PRD specifies a trailing 30 days. The sales data
+is sliced to the last 30 days available (24 Aug – 22 Sep 2026), but the PLP and PDP
+extracts arrived without a stated range and are a longer aggregate — so CTR and PDP
+rates read high relative to a true 30-day pull. Re-pull both at 30 days before quoting
+figures externally.
 
-**M6 peer group.** The catalogue's `Category` field is `"Main"` for every row, so
-bouquet type stands in. Groups below 10 products fall back to the page-wide
-benchmark: in a 3-product group every member sits at its own median and the modifier
-stops discriminating. The benchmark is the **median, not the mean** — one ₹45,045
-product drags the Bunches mean to ₹2,395 against a median of ₹995, which would mark
-70% of the group "below average" and flatten the signal.
+**New arrivals run out after a dozen products**, nearly all one Korean range launched on
+a single day, against 24 N seats. Use the manual new-arrival list to seed the pool, or
+accept that N stops appearing partway down the page.
 
-## Known issues with the model as specified
+**Three of the four signals share a funnel.** PDP add-to-cart rate, conversion rate and
+order count all measure stages of the same journey, so 65% of the weight sits downstream
+of the click and the three will move together. The effective weighting is more
+concentrated than 35/25/20/20 reads.
 
-**M5 does almost nothing.** At the specified three-month threshold, 237 of 240
-products qualify as recent. Multiplying 98.7% of the catalogue by 1.4 changes no
-relative ordering — it is arithmetically identical to having no M5 at all. Recency
-was designed for a cake catalogue where long-tail SKUs go dormant; a live flower page
-sells nearly everything nearly every day. The viewer exposes shorter windows; 7 or 14
-days makes the modifier discriminate. Consider replacing the step function with
-graded decay.
+## Open questions from the PRD
 
-**M4 largely restates M2.** The two add-to-cart metrics correlate at ρ = 0.77 — they
-measure much the same propensity at two different surfaces. The effective weighting
-is therefore more concentrated on add-to-cart than 45/25/20/10 suggests. At D = 10%
-the distortion is small, but the four metrics are not independent.
-
-**M4's scope doesn't match M1 and M2.** M1 and M2 are scoped to this listing page,
-but `view_item` is global — only about 10% of PDP traffic arrives from
-`/all-flowers`. M4 therefore measures site-wide product strength, not this page's.
-Inherited from the Bakingo definition and kept identical on purpose.
-
-**E and F compound.** Both firing gives ×1.96, which can outweigh the entire M1–M4
-spread. Worth watching when tuning.
-
-**Large-format bouquets are demoted hard.** Every 100/250/365/1000-rose product
-bottoms out on M4 — high-consideration items people look at and don't cart. Probably
-correct for an evergreen sequence, but these are brand-halo products. A pinned-position
-override in the config layer is the sane answer.
-
-## Open questions
-
-1. **GA4 date window.** The analytics extracts arrived without a stated range. The
-   build assumes they align with the order window (25 Jun – 22 Sep 2026); the viewer
-   flags this. Confirm and update `WINDOW_START` / `WINDOW_END` in
-   `src/build_dataset.py`.
-2. **M6 direction.** Currently boosts below-median prices (volume play). Inverting it
-   boosts premium products (AOV play). Toggleable in the viewer.
-3. **M3 source.** Built from internal DB orders. GA4 `PDP Purchase` is also available
-   and consistent with M1/M2/M4, but undercounts through attribution loss.
-
-## Production notes
-
-This MVP joins PDP metrics and the current sequence **on product name**, because
-neither extract carried an ID column. All 240 matched cleanly, but the production
-Ranking Service must join on `GUID` — product titles are editable in the CMS, and two
-products in this catalogue already differ only by an apostrophe.
-
-Positions are not debiased. That is usually a serious omission, but here current
-position is uncorrelated with CTR, so measured rates are not meaningfully contaminated
-by placement. This will stop being true once WSM ships and starts concentrating
-impressions on high performers — from that point, position-debiasing becomes required
-before recomputing weights, or the model will compound its own first ranking.
+1. Should products undeliverable to the visitor's pincode be pushed down and greyed out?
+   Not modelled — needs serviceability data per SKU.
+2. Who owns the boost list, and does each boost carry an end date? The config has no
+   expiry field yet; say the word and I'll add one.
+3. Should birthday, anniversary and other pages get their own boost lists? The config is
+   per-page already, so this is a deployment question rather than a code change.
