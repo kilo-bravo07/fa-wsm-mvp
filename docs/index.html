@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Listing Page Sequencing — all-flowers</title>
+<title>Listing Sequencing — all-flowers</title>
 <style>
   :root {
     color-scheme: light;
     --surface-1:#fcfcfb; --plane:#f9f9f7; --ink-1:#0b0b0b; --ink-2:#52514e;
     --ink-muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
-    --s-m:#2a78d6; --s-h:#eb6834; --s-n:#1baf7a; --s-f:#eda100; --s-low:#898781;
-    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+    --b-L:#2a78d6; --b-M:#eb6834; --b-U:#1baf7a; --b-H:#eda100;
+    --b-V:#e87ba4; --b-C:#4a3aa7; --b-P:#008300; --b-F:#e34948; --b-x:#898781;
+    --warn:#fab219; --crit:#d03b3b; --good:#0ca30c;
     --chip:rgba(11,11,11,.05);
   }
   @media (prefers-color-scheme: dark) {
@@ -18,7 +19,8 @@
       color-scheme: dark;
       --surface-1:#1a1a19; --plane:#0d0d0d; --ink-1:#fff; --ink-2:#c3c2b7;
       --ink-muted:#898781; --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
-      --s-m:#3987e5; --s-h:#d95926; --s-n:#199e70; --s-f:#c98500; --s-low:#898781;
+      --b-L:#3987e5; --b-M:#d95926; --b-U:#199e70; --b-H:#c98500;
+      --b-V:#d55181; --b-C:#9085e9; --b-P:#008300; --b-F:#e66767;
       --chip:rgba(255,255,255,.07);
     }
   }
@@ -26,7 +28,8 @@
     color-scheme: dark;
     --surface-1:#1a1a19; --plane:#0d0d0d; --ink-1:#fff; --ink-2:#c3c2b7;
     --ink-muted:#898781; --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
-    --s-m:#3987e5; --s-h:#d95926; --s-n:#199e70; --s-f:#c98500; --s-low:#898781;
+    --b-L:#3987e5; --b-M:#d95926; --b-U:#199e70; --b-H:#c98500;
+    --b-V:#d55181; --b-C:#9085e9; --b-P:#008300; --b-F:#e66767;
     --chip:rgba(255,255,255,.07);
   }
   * { box-sizing:border-box; }
@@ -35,13 +38,13 @@
   .wrap { max-width:1240px; margin:0 auto; padding:32px 16px 80px; }
   header { position:relative; }
   header h1 { font-size:26px; margin:0 0 6px; letter-spacing:-.01em; padding-right:90px; }
-  header p { margin:0; color:var(--ink-2); max-width:72ch; }
+  header p { margin:0; color:var(--ink-2); max-width:74ch; }
   .meta-line { margin-top:10px; font-size:13px; color:var(--ink-muted); }
   .themebtn { position:absolute; top:0; right:0; }
   @media (max-width:560px){ .themebtn{position:static;margin-bottom:12px} header h1{padding-right:0} }
 
-  .flag { display:block; margin-top:10px; padding:8px 11px; border-radius:6px; font-size:13px;
-    background:color-mix(in srgb,var(--warn) 14%,transparent); color:var(--ink-1);
+  .flag { display:block; margin-top:10px; padding:9px 12px; border-radius:6px; font-size:13px;
+    background:color-mix(in srgb,var(--warn) 14%,transparent);
     border:1px solid color-mix(in srgb,var(--warn) 40%,transparent); }
   .flag.err { background:color-mix(in srgb,var(--crit) 12%,transparent);
     border-color:color-mix(in srgb,var(--crit) 40%,transparent); }
@@ -49,60 +52,55 @@
   .card { background:var(--surface-1); border:1px solid var(--border);
     border-radius:10px; padding:20px; margin-top:20px; }
   .card > h2 { font-size:16px; margin:0 0 4px; }
-  .card > .sub { font-size:13px; color:var(--ink-2); margin:0 0 18px; max-width:80ch; }
+  .card > .sub { font-size:13px; color:var(--ink-2); margin:0 0 18px; max-width:82ch; }
 
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(165px,1fr)); gap:12px; margin-top:20px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:20px; }
   .kpi { background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
-  .kpi .v { font-size:26px; font-weight:600; letter-spacing:-.02em; line-height:1.1; }
+  .kpi .v { font-size:25px; font-weight:600; letter-spacing:-.02em; line-height:1.1; }
   .kpi .l { font-size:12px; color:var(--ink-2); margin-top:5px; }
 
   .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:18px 26px; }
   .ctl label { display:flex; justify-content:space-between; align-items:baseline;
     font-size:13px; color:var(--ink-2); margin-bottom:5px; gap:8px; }
   .ctl label b { color:var(--ink-1); font-variant-numeric:tabular-nums; font-weight:600; }
-  input[type=range] { width:100%; accent-color:var(--s-m); }
-  select,button,input[type=number],input[type=text] { font:inherit; font-size:13px; padding:6px 9px;
+  input[type=range] { width:100%; accent-color:var(--b-L); }
+  select,button,input[type=number] { font:inherit; font-size:13px; padding:6px 9px;
     border-radius:6px; border:1px solid var(--border); background:var(--surface-1); color:var(--ink-1); }
   button { cursor:pointer; } button:hover { background:var(--chip); }
-  input[type=number] { width:88px; }
   .toggles { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin-top:18px;
     padding-top:16px; border-top:1px solid var(--grid); font-size:13px; }
   .toggles label { display:inline-flex; align-items:center; gap:6px; color:var(--ink-2); }
   .sumbar { margin-top:14px; font-size:13px; color:var(--ink-2); }
   .sumbar.bad { color:var(--crit); }
 
-  /* slot chips */
   .slot { display:inline-flex; align-items:center; justify-content:center;
-    width:22px; height:22px; border-radius:5px; font-size:11px; font-weight:700; color:#fff; }
-  .slot.M{background:var(--s-m)} .slot.H{background:var(--s-h)}
-  .slot.N{background:var(--s-n)} .slot.F{background:var(--s-f)}
-  .slot.LOW,.slot\.-{background:var(--s-low)}
-  .slot.dash{background:var(--s-low)}
+    width:21px; height:21px; border-radius:5px; font-size:11px; font-weight:700; color:#fff; flex:none; }
+  .slot.L{background:var(--b-L)} .slot.M{background:var(--b-M)} .slot.U{background:var(--b-U)}
+  .slot.H{background:var(--b-H)} .slot.V{background:var(--b-V)} .slot.C{background:var(--b-C)}
+  .slot.P{background:var(--b-P)} .slot.F{background:var(--b-F)} .slot.x{background:var(--b-x)}
 
-  .tmpl { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:6px 0 16px; }
+  .tmpl { display:grid; grid-template-columns:repeat(10,1fr); gap:6px; max-width:640px; margin:8px 0 4px; }
   .tmpl .pos { display:flex; flex-direction:column; align-items:center; gap:3px; }
-  .tmpl .pos small { font-size:10px; color:var(--ink-muted); font-variant-numeric:tabular-nums; }
-  .tmpl select { padding:3px 4px; font-size:12px; width:52px; }
-  .tmpl h4 { font-size:12px; color:var(--ink-2); margin:0 10px 0 0; width:72px; font-weight:600; }
+  .tmpl .pos small { font-size:9.5px; color:var(--ink-muted); font-variant-numeric:tabular-nums; }
+  .tmpl select { padding:3px 2px; font-size:12px; width:100%; text-align:center; }
 
-  /* page preview */
-  .batches { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:14px; }
-  .batch { border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--surface-1); }
-  .batch h3 { font-size:12px; margin:0 0 9px; color:var(--ink-muted); text-transform:uppercase;
-    letter-spacing:.05em; font-weight:600; }
-  .row { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12.5px; }
-  .row .n { width:26px; text-align:right; color:var(--ink-muted); font-variant-numeric:tabular-nums; font-size:11px; }
-  .row .t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .row .p { color:var(--ink-2); font-variant-numeric:tabular-nums; font-size:11.5px; }
-  .row.fb .t { color:var(--ink-2); }
-  .row .fbmark { color:var(--ink-muted); font-size:10px; }
-
-  .legend { display:flex; gap:15px; font-size:12px; color:var(--ink-2); margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+  .legend { display:flex; gap:14px; font-size:12px; color:var(--ink-2); margin-bottom:12px; flex-wrap:wrap; align-items:center; }
   .legend i { width:10px; height:10px; border-radius:3px; display:inline-block; margin-right:6px; vertical-align:-1px; }
 
   svg { display:block; width:100%; height:auto; overflow:visible; }
   .gridline{stroke:var(--grid);stroke-width:1} .axisline{stroke:var(--axis);stroke-width:1}
   .tick{font-size:11px;fill:var(--ink-muted)} .axlabel{font-size:11px;fill:var(--ink-2)}
+
+  .sets { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:14px; }
+  .set { border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--surface-1); }
+  .set h3 { font-size:12px; margin:0 0 9px; color:var(--ink-muted); text-transform:uppercase;
+    letter-spacing:.05em; font-weight:600; }
+  .row { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12.5px; }
+  .row .n { width:28px; text-align:right; color:var(--ink-muted); font-variant-numeric:tabular-nums; font-size:11px; flex:none; }
+  .row .t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .row .p { color:var(--ink-2); font-variant-numeric:tabular-nums; font-size:11.5px; flex:none; }
+  .row.fb .t { color:var(--ink-2); }
+  .row .fbmark { color:var(--ink-muted); font-size:10px; }
 
   .tablewrap { overflow-x:auto; }
   table { border-collapse:collapse; width:100%; font-size:13px; }
@@ -115,31 +113,25 @@
   tbody tr:hover { background:var(--chip); }
   .tag { font-size:10px; padding:1px 5px; border-radius:3px; background:var(--chip);
     color:var(--ink-muted); margin-left:6px; }
+  .bad { color:var(--crit); font-weight:600; }
 
-  .picker { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-  @media (max-width:760px){ .picker{grid-template-columns:1fr} }
-  /* Grid and flex children default to min-content width; a <select> holding long
-     product names then forces the page wider than the viewport on a phone. */
-  .picker > div { min-width:0; }
-  .picker select { width:100%; max-width:100%; }
-  .row .t { min-width:0; }
-  .picker h4 { font-size:13px; margin:0 0 3px; }
-  .picker p { font-size:12.5px; color:var(--ink-2); margin:0 0 9px; }
-  .chosen { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; min-height:26px; }
-  .chosen span { background:var(--chip); border-radius:5px; padding:3px 7px; font-size:12px;
-    display:inline-flex; gap:6px; align-items:center; }
-  .chosen b { cursor:pointer; color:var(--ink-muted); font-weight:700; }
+  .boostrow { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .boostrow select { flex:1; min-width:0; max-width:420px; }
+  .chosen { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  .chosen span { background:var(--chip); border-radius:5px; padding:4px 8px; font-size:12.5px;
+    display:flex; gap:8px; align-items:center; }
+  .chosen b { cursor:pointer; color:var(--ink-muted); font-weight:700; margin-left:auto; }
   .chosen b:hover { color:var(--crit); }
 
   details.notes { margin-top:20px; }
   details.notes summary { cursor:pointer; font-size:14px; font-weight:600; padding:6px 0; }
-  details.notes div { font-size:13.5px; color:var(--ink-2); max-width:82ch; }
+  details.notes div { font-size:13.5px; color:var(--ink-2); max-width:84ch; }
   details.notes h3 { font-size:13px; color:var(--ink-1); margin:18px 0 4px; }
   code { background:var(--chip); padding:1px 5px; border-radius:3px; font-size:12px; }
 
   .tip { position:fixed; pointer-events:none; z-index:50; opacity:0; transition:opacity .1s;
     background:var(--surface-1); border:1px solid var(--border); border-radius:7px;
-    padding:9px 11px; font-size:12px; line-height:1.5; box-shadow:0 6px 22px rgba(0,0,0,.14); max-width:270px; }
+    padding:9px 11px; font-size:12px; line-height:1.5; box-shadow:0 6px 22px rgba(0,0,0,.14); max-width:280px; }
   .tip b { display:block; margin-bottom:4px; }
   .tip span { color:var(--ink-2); display:block; }
 </style>
@@ -150,9 +142,9 @@
 <header>
   <button class="themebtn" id="theme">Theme</button>
   <h1>Listing Page Sequencing — /all-flowers</h1>
-  <p>Products are scored on four behavioural signals, then dealt into a repeating
-     ten-slot template that holds a price mix, a new-arrival seat and a featured seat.
-     Every control below is live.</p>
+  <p>Products are scored on four signals, then dealt into a repeating thirty-slot template
+     that holds five price bands plus combos and hampers. Boosted SKUs are inserted on top,
+     outside the thirty. Every control is live.</p>
   <div class="meta-line" id="metaline"></div>
   <div id="flags"></div>
 </header>
@@ -161,108 +153,97 @@
 
 <section class="card">
   <h2>Step 1 · Score</h2>
-  <p class="sub">Four signals, each normalised 0–1 across the page, then weighted.
-     Rates are smoothed toward the site average so thin-traffic products aren't
-     flattered or punished by noise.</p>
+  <p class="sub">Four signals, each normalised 0–1 across the catalogue, then weighted. Rates are
+     smoothed toward the site average so thin-traffic products are neither flattered nor buried.</p>
   <div class="controls" id="weights"></div>
   <div class="sumbar" id="sumbar"></div>
   <div class="toggles">
+    <label>ATC rate ÷
+      <select id="dnAtc"><option value="clicks">clicks (PRD)</option><option value="pdp_views">PDP views</option></select>
+    </label>
+    <label>Conversion ÷
+      <select id="dnCvr"><option value="clicks">clicks (PRD)</option><option value="pdp_views">PDP views</option></select>
+    </label>
+    <label>Normalisation
+      <select id="norm"><option value="minmax">Min–max</option><option value="percentile">Percentile rank</option></select>
+    </label>
     <label>Smoothing k
       <select id="smooth">
-        <option value="0">Off (raw rates)</option>
-        <option value="1000">1,000</option>
-        <option value="3000" selected>3,000</option>
-        <option value="8000">8,000</option>
+        <option value="0">Off</option><option value="1000">1,000</option>
+        <option value="3000" selected>3,000</option><option value="8000">8,000</option>
       </select>
     </label>
-    <button id="resetW">Reset weights to PRD</button>
+    <label>Impression floor <input type="number" id="floor" step="50" style="width:78px"></label>
+    <button id="resetScore">Reset to PRD</button>
   </div>
 </section>
 
 <section class="card">
-  <h2>Step 2 · Slots</h2>
-  <p class="sub">Each position in a batch of ten asks for a slot type, and the type takes the
-     highest-scoring unplaced product from its pool. Edit any position below.</p>
-
-  <div class="legend">
-    <span><i style="background:var(--s-m)"></i>M · Medium</span>
-    <span><i style="background:var(--s-h)"></i>H · High</span>
-    <span><i style="background:var(--s-n)"></i>N · New arrival</span>
-    <span><i style="background:var(--s-f)"></i>F · Featured</span>
-    <span><i style="background:var(--s-low)"></i>Low / overflow</span>
-  </div>
-
-  <div id="templates"></div>
-
-  <div class="toggles" style="border-top:1px solid var(--grid)">
-    <label>M band ₹<input type="number" id="mMin" step="50"> – ₹<input type="number" id="mMax" step="50"></label>
-    <label>H band from ₹<input type="number" id="hMin" step="50"></label>
-    <label>New arrival = last <input type="number" id="newDays" step="5" style="width:68px"> days</label>
-    <button id="resetT">Reset template to PRD</button>
+  <h2>Step 2 · The thirty-slot template</h2>
+  <p class="sub">Each position asks for a bucket; the bucket hands over its highest-scoring unplaced
+     product. The template repeats for the whole page. Edit any position.</p>
+  <div class="legend" id="bucketLegend"></div>
+  <div id="template"></div>
+  <div class="toggles">
+    <span id="tmplCounts" style="color:var(--ink-2)"></span>
+    <button id="resetTmpl">Reset template</button>
   </div>
 </section>
 
 <section class="card">
-  <h2>Pool health</h2>
-  <p class="sub">Supply is how many products qualify for each slot type; demand is how many
-     seats the template asks for across the whole page. A shortfall isn't a failure — the
-     fallback chain covers it — but it tells you how far the page drifts from the intended mix.</p>
-  <div class="legend"><span><i style="background:var(--s-m)"></i>Products available</span><span><i style="background:var(--ink-muted)"></i>Seats the template wants</span></div>
-  <svg id="pools" viewBox="0 0 900 230" role="img" aria-label="Slot pool supply against demand"></svg>
+  <h2>Bucket supply</h2>
+  <p class="sub">How many products each bucket holds, and how many complete sets of thirty it can
+     fill before the slot starts falling back to a neighbouring band.</p>
+  <svg id="pools" viewBox="0 0 900 250" role="img" aria-label="Products available per bucket against sets covered"></svg>
   <div id="poolnote" style="font-size:13px;color:var(--ink-2);margin-top:12px"></div>
 </section>
 
 <section class="card">
-  <h2>Manual lists</h2>
-  <p class="sub">The two seats the algorithm can't fill on its own.</p>
-  <div class="picker">
-    <div>
-      <h4>Boost list → F slot</h4>
-      <p>Category team's picks. One is drawn per batch, stable within a session.
-         Empty list means F falls back to the next pool (requirement 7).</p>
-      <select id="boostPick"><option value="">Add a product…</option></select>
-      <div class="chosen" id="boostChosen"></div>
-    </div>
-    <div>
-      <h4>Manual new arrivals → N slot</h4>
-      <p>Force a product into the N pool regardless of launch date — for when genuine
-         launches run dry, which they do here after a handful of batches.</p>
-      <select id="newPick"><option value="">Add a product…</option></select>
-      <div class="chosen" id="newChosen"></div>
-    </div>
+  <h2>Boost insertions</h2>
+  <p class="sub">Up to four per set of thirty. An insertion adds a product rather than replacing one,
+     so a set carrying two insertions shows thirty-two — the base order never shifts.
+     A SKU already placed, or out of stock, is skipped.</p>
+  <div class="boostrow">
+    <select id="boostPick"><option value="">Choose a product…</option></select>
+    <label style="font-size:13px;color:var(--ink-2)">at position
+      <input type="number" id="boostPos" value="5" min="1" style="width:70px"></label>
+    <button id="boostAdd">Insert</button>
   </div>
+  <div class="chosen" id="boostList"></div>
 </section>
 
 <section class="card">
   <h2>The page</h2>
-  <p class="sub">Every product in its final position. A faded title with a dot means the
-     slot's own pool was empty and the fallback chain filled it.
-     <span id="pagecount"></span></p>
+  <p class="sub">Every product in final position. A faded title with a dot means the slot's own bucket
+     was empty and the fallback chain filled it. <span id="pagecount"></span></p>
   <div class="toggles" style="border:0;padding-top:0;margin-top:0;margin-bottom:14px">
-    <label>Show <select id="nbatch">
-      <option value="6">first 6 batches</option>
-      <option value="12" selected>first 12 batches</option>
-      <option value="24">all batches</option>
-    </select></label>
-    <button id="csv">Download CSV</button>
+    <label>Show <select id="nsets">
+      <option value="2">first 2 sets</option><option value="4" selected>first 4 sets</option>
+      <option value="99">all sets</option></select></label>
   </div>
-  <div class="batches" id="batches"></div>
+  <div class="sets" id="sets"></div>
 </section>
 
 <section class="card">
   <h2>Full sequence</h2>
   <p class="sub">Click any header to sort.</p>
+  <div class="toggles" style="border:0;padding-top:0;margin-top:0;margin-bottom:14px">
+    <button id="seqExport">Download sequence (nid | name | index)</button>
+    <button id="csv">Download full CSV</button>
+    <span style="font-size:12.5px;color:var(--ink-muted)">Both always in page order, whatever the table sort.</span>
+  </div>
   <div class="tablewrap">
     <table id="tbl">
       <thead><tr>
         <th data-k="position">#</th>
-        <th data-k="batch">Batch</th>
+        <th data-k="set">Set</th>
         <th data-k="slot">Slot</th>
         <th data-k="title" class="name">Product</th>
+        <th data-k="productType">Type</th>
         <th data-k="price" class="num">Price</th>
-        <th data-k="band">Band</th>
+        <th data-k="plpViews" class="num">Impr.</th>
         <th data-k="ctr_raw" class="num">CTR</th>
-        <th data-k="atc_pdp_raw" class="num">PDP ATC</th>
+        <th data-k="atc_raw" class="num">ATC</th>
         <th data-k="conversion_raw" class="num">Conv</th>
         <th data-k="orders" class="num">Orders</th>
         <th data-k="score" class="num">Score</th>
@@ -276,50 +257,55 @@
   <summary>Methodology, assumptions and known gaps</summary>
   <div>
     <h3>Scoring</h3>
-    <p>CTR = PLP clicks ÷ PLP impressions · PDP ATC rate = PDP add-to-cart ÷ PDP views ·
-       Conversion = orders ÷ PLP clicks · Orders = order count. Each is normalised 0–1 across
-       the page before weighting, because they are rates on very different scales — page CTR
-       runs near 1.6%, PDP ATC near 14% — and summing them raw would let one dominate through
+    <p>CTR = clicks ÷ impressions · ATC rate = PDP add-to-cart ÷ clicks · Conversion = orders ÷ clicks ·
+       Orders = order count. Each is normalised 0–1 across the catalogue before weighting, because
+       they are rates on very different scales and summing them raw would let one dominate through
        its units alone.</p>
 
-    <h3>Smoothing</h3>
-    <p>A product with 5 clicks and 2 add-to-carts posts a 40% rate. Unsmoothed it outranks
-       genuine performers on noise. Each ratio is shrunk toward the page's pooled rate in
-       proportion to how little traffic supports it. Set smoothing to Off to see the unguarded
-       version.</p>
+    <h3>The two "÷ clicks" denominators</h3>
+    <p>This is what the PRD specifies and what the page loads with, but the data does not support it.
+       Add-to-carts and orders arrive through routes that never touched the listing, while clicks are
+       counted only on it — so the ratio is between two different populations. Measured here:
+       <b>213 of 346 products exceed 100%</b> on ATC rate, the median is 132% and the maximum 1,000%.
+       Switched to PDP views, nothing exceeds 100% and the median falls to 9.2%. The switch changes
+       14 of the top 30, so it is not cosmetic.</p>
 
-    <h3>The fallback chain</h3>
-    <p>The PRD's strict ₹750–1200 M band qualifies 56 products, but the template asks for 166 M
-       seats across 24 batches, and 58 products priced below ₹750 belong to no band the PRD
-       names. Each slot therefore falls through an ordered chain when its own pool empties
-       (M → LOW → H, H → M → LOW, N and F → M → LOW → H). The strict band governs the top of the
-       page, where the price mix matters, and every product still lands exactly once.
-       Editable in <code>config/config.json</code>.</p>
+    <h3>Combo orders are not being captured</h3>
+    <p>Only <b>3 of 60 combos</b> report any purchase in the PDP extract, yet 35 of them sold in the
+       earlier order file — <code>Mystic Orchids N Cake Combo</code> at 156 orders and
+       <code>Red Rose N Truffle</code> at 120 both show zero here. Two of the four signals are order-derived,
+       so 40% of the combo score is currently reading zero for almost the whole bucket, and the Combo
+       slots are being decided on CTR and ATC alone. <code>Make Your Own Combo</code> takes the top
+       combo slot on 315 purchases against 1 add-to-cart, which cannot be right either.</p>
 
-    <h3>Three signals share a funnel</h3>
-    <p>PDP add-to-cart rate, conversion rate and order count all measure stages of the same
-       journey, so 65% of the weight sits downstream of the click. They will move together.
-       That isn't wrong, but the effective weighting is more concentrated than 35/25/20/20
-       reads.</p>
+    <h3>Three pools, three different pages</h3>
+    <p>Flower metrics come from <code>/all-flowers</code>, combos from <code>/combos/flowers-and-cakes</code>,
+       hampers from <code>/hampers/same-day-delivery</code>. A product's CTR therefore reflects the page it
+       was measured on. Buckets contain this — combos only ever compete with combos — but the fallback
+       chain crosses buckets, so a combo filling a price slot is being compared on a rate earned elsewhere.</p>
 
-    <h3>Stock status is missing</h3>
-    <p>No extract carries it, so every product is treated as in stock. Three requirements
-       depend on it — out-of-stock barred from the top 10, pushed to the end of the page, and
-       the guardrail metric. The logic is implemented and will activate as soon as a
-       <code>GUID, in_stock</code> column arrives; until then it is untested against real data.</p>
+    <h3>Fallback</h3>
+    <p>The PRD says an empty pool borrows the equivalent SKU from a later batch. That cannot terminate
+       once a pool is globally exhausted, and pulling forward leaves a hole that cascades. Instead a
+       price slot falls through to the nearest band by price, then to the best remaining product of any
+       bucket; combo and hamper slots fall straight through to best remaining.</p>
+
+    <h3>Impression floor</h3>
+    <p>Below the floor a product is not scored on its own rates — it takes the median score of its own
+       bucket, so a thin combo is judged against combos rather than against the whole catalogue.
+       Without it, smoothing hands a no-data product the page-average rate and it outranks products with
+       real measured performance.</p>
+
+    <h3>Missing data</h3>
+    <p>No stock status in any extract, so every product is treated as in stock and the two stock rules
+       are implemented but unverified. No price for combos or hampers — not fatal, since both go to
+       their own buckets regardless, but it means combo-versus-price-band precedence cannot be checked.
+       No launch dates for combos or hampers.</p>
 
     <h3>Window</h3>
-    <p>The PRD specifies a trailing 30 days. Sales data ends 22 Sep 2026, so the window is the
-       last 30 days of available data rather than of the calendar. The GA4 extracts arrived
-       without a stated range and are assumed to match — they are currently a longer aggregate,
-       which inflates CTR and PDP rates relative to a true 30-day pull. Re-pull both at 30 days
-       before quoting these numbers.</p>
-
-    <h3>New arrivals run out</h3>
-    <p>The N pool holds whatever launched inside the window — currently a dozen products, nearly
-       all one Korean range dropped on a single day. The template wants one per batch across 24
-       batches. Use the manual list above to seed it, or accept that N stops appearing partway
-       down and the slot falls back to M.</p>
+    <p>Flower orders are sliced to the 30 days ending 22 Sep 2026. The GA4 extracts for all three pools
+       arrived without a stated range, and combo and hamper orders come from PDP Purchase whose window is
+       also unstated. Re-pull everything on one declared window before quoting these figures.</p>
   </div>
 </details>
 
@@ -333,439 +319,470 @@ const META = DATA.meta;
 const CFG0 = META.config;
 const ALL = DATA.products.filter(p => p.onPage);
 
-const SIGNALS = ['ctr','atc_pdp','conversion','orders'];
+const SIGNALS = ['ctr','atc','conversion','orders'];
 const SIGLABEL = {
   ctr: 'CTR · clicks ÷ impressions',
-  atc_pdp: 'PDP ATC · add-to-cart ÷ PDP views',
-  conversion: 'Conversion · orders ÷ clicks',
+  atc: 'ATC rate',
+  conversion: 'Conversion rate',
   orders: 'Orders · total count',
 };
-const SLOTS = ['M','H','N','F'];
+const BK = CFG0.buckets;
+const BKEYS = Object.keys(BK);
 
 let W = {...CFG0.weights};
 let K = CFG0.smoothing_k;
-let bands = JSON.parse(JSON.stringify(CFG0.price_bands));
-let templates = JSON.parse(JSON.stringify(CFG0.templates));
-let newDays = CFG0.new_arrival_days;
-let boost = [...CFG0.boost_list.guids];
-let manualNew = [...CFG0.manual_new.guids];
-const CHAIN = CFG0.fallback_chain;
-const RULES = CFG0.rules;
-
-let placed = [];
+let NORM = CFG0.normalisation || 'minmax';
+let FLOOR = CFG0.impression_floor;
+let DN = {...CFG0.denominators};
+let template = [...CFG0.template];
+let boosts = [];
+let placed = [], scored = [];
 let sortKey = 'position', sortDir = 1;
 
-const fmt = n => n.toLocaleString('en-IN');
-const pct = (n,d=2) => (n*100).toFixed(d)+'%';
-const inr = n => '₹'+Math.round(n).toLocaleString('en-IN');
+const fmt = n => (n ?? 0).toLocaleString('en-IN');
+const pct = (n,d=1) => n==null || !isFinite(n) ? '—' : (n*100).toFixed(d)+'%';
+const inr = n => n==null ? '—' : '₹'+Math.round(n).toLocaleString('en-IN');
 
 /* ---------- Step 1: score (mirrors src/sequence.py) ---------- */
 function smooth(s,t,prior,k){ if(k<=0) return t>0 ? s/t : prior; return (s+k*prior)/(t+k); }
 function minmax(v){ const lo=Math.min(...v), hi=Math.max(...v);
   return hi===lo ? v.map(()=>0.5) : v.map(x=>(x-lo)/(hi-lo)); }
+function pctile(v){
+  const idx=v.map((x,i)=>[x,i]).sort((a,b)=>a[0]-b[0]); const out=new Array(v.length);
+  for(let i=0;i<idx.length;){ let j=i;
+    while(j+1<idx.length && idx[j+1][0]===idx[i][0]) j++;
+    const avg=(i+j+2)/2;
+    for(let t=i;t<=j;t++) out[idx[t][1]]=avg/v.length;
+    i=j+1; }
+  return out;
+}
+const normFn = v => NORM==='percentile' ? pctile(v) : minmax(v);
+const den = (p,which) => which==='clicks' ? p.plpClicks : p.pdpViews;
+
+function bucketOf(p) {
+  for (const key of CFG0.precedence) {
+    const b = BK[key];
+    if (b.kind === 'category') {
+      if ((p.productType||'').toLowerCase() === String(b.value).toLowerCase()) return key;
+    } else if (p.price != null) {
+      if (p.price >= b.min && (b.max == null || p.price <= b.max)) return key;
+    }
+  }
+  return null;
+}
 
 function scoreAll() {
   const sum = f => ALL.reduce((a,b)=>a+f(b),0);
   const pCtr = sum(p=>p.plpClicks)/Math.max(sum(p=>p.plpViews),1);
-  const pAtc = sum(p=>p.pdpAtc)/Math.max(sum(p=>p.pdpViews),1);
-  const pCvr = sum(p=>p.orders)/Math.max(sum(p=>p.plpClicks),1);
+  const pAtc = sum(p=>p.pdpAtc)/Math.max(sum(p=>den(p,DN.atc)),1);
+  const pCvr = sum(p=>p.orders)/Math.max(sum(p=>den(p,DN.conversion)),1);
 
-  const raw = ALL.map(p => ({
-    p,
+  const raw = ALL.map(p => ({ p,
     ctr_raw: smooth(p.plpClicks,p.plpViews,pCtr,K),
-    atc_pdp_raw: smooth(p.pdpAtc,p.pdpViews,pAtc,K/10),
-    conversion_raw: smooth(p.orders,p.plpClicks,pCvr,K/30),
+    atc_raw: smooth(p.pdpAtc,den(p,DN.atc),pAtc,K/10),
+    conversion_raw: smooth(p.orders,den(p,DN.conversion),pCvr,K/30),
     orders_raw: p.orders,
   }));
-  const norm = {};
-  SIGNALS.forEach(s => norm[s] = minmax(raw.map(r=>r[s+'_raw'])));
+  const n = {};
+  SIGNALS.forEach(s => n[s] = normFn(raw.map(r=>r[s+'_raw'])));
 
-  return raw.map((r,i) => {
-    const o = {...r.p, ctr_raw:r.ctr_raw, atc_pdp_raw:r.atc_pdp_raw,
+  const out = raw.map((r,i) => {
+    const o = {...r.p, ctr_raw:r.ctr_raw, atc_raw:r.atc_raw,
                conversion_raw:r.conversion_raw, orders_raw:r.orders_raw};
-    // Normalised values go in `<signal>_n`. Writing them onto `<signal>` would
-    // clobber the raw `orders` count the table, CSV and KPIs read.
-    SIGNALS.forEach(s => o[s+'_n'] = norm[s][i]);
+    SIGNALS.forEach(s => o[s+'_n'] = n[s][i]);
     o.score = SIGNALS.reduce((a,s)=>a+o[s+'_n']*W[s],0);
-    o.band = bandOf(o.price);
-    const cut = new Date(META.windowEnd); cut.setDate(cut.getDate()-newDays);
-    o.isNewArrival = (o.created ? new Date(o.created) > cut : false) || manualNew.includes(o.guid);
-    o.isBoost = boost.includes(o.guid);
-    o.inStock = o.inStock !== false;
+    o.bucket = bucketOf(o);
+    o.belowFloor = (o.plpViews||0) < FLOOR;
     return o;
   });
+
+  // Below the floor, take the median score of your own bucket.
+  const above = out.filter(o=>!o.belowFloor);
+  const med = {};
+  BKEYS.forEach(k => {
+    const v = above.filter(o=>o.bucket===k).map(o=>o.score).sort((a,b)=>a-b);
+    if (v.length) med[k] = v[Math.floor(v.length/2)];
+  });
+  const pageV = above.map(o=>o.score).sort((a,b)=>a-b);
+  const pageMed = pageV.length ? pageV[Math.floor(pageV.length/2)] : 0;
+  out.forEach(o => { if (o.belowFloor) o.score = med[o.bucket] ?? pageMed; });
+  return out;
 }
-const bandOf = price =>
-  price >= bands.H.min ? 'H' :
-  (price >= bands.M.min && price <= bands.M.max) ? 'M' : 'LOW';
 
 /* ---------- Step 2: allocate ---------- */
-function templateFor(i) {
-  if (i === 0) return templates.batch_1;
-  if (i === 1) return templates.batch_2;
-  return templates.batch_default;
+function priceOrder() {
+  return BKEYS.filter(k=>BK[k].kind==='price').sort((a,b)=>BK[a].min-BK[b].min);
+}
+function chain(key) {
+  if (BK[key].kind !== 'price') return [key,'*'];
+  const o = priceOrder(), i = o.indexOf(key);
+  const rest = o.filter(b=>b!==key)
+    .sort((a,b)=>Math.abs(o.indexOf(a)-i)-Math.abs(o.indexOf(b)-i) || o.indexOf(a)-o.indexOf(b));
+  return [key,...rest,'*'];
 }
 
-function allocate(scored) {
-  const byScore = [...scored].sort((a,b)=>b.score-a.score);
-  // A boosted SKU is held out of the ordinary price pools — otherwise an M slot
-  // takes it before its F seat comes round, the boost buys nothing, and F falls
-  // back. It rejoins the tail if the template runs out of F seats.
-  const reserve = RULES.reserve_boost_for_f !== false;
-  const held = g => reserve && boost.includes(g);
-  const pools = {
-    M: byScore.filter(p=>p.band==='M' && !held(p.guid)).map(p=>p.guid),
-    H: byScore.filter(p=>p.band==='H' && !held(p.guid)).map(p=>p.guid),
-    LOW: byScore.filter(p=>p.band==='LOW' && !held(p.guid)).map(p=>p.guid),
-    N: byScore.filter(p=>p.isNewArrival && !held(p.guid)).map(p=>p.guid),
-    F: shuffleStable(byScore.filter(p=>p.isBoost).map(p=>p.guid)),
-  };
-  const by = Object.fromEntries(scored.map(p=>[p.guid,p]));
+function allocate(sc) {
+  const order = [...sc].sort((a,b)=>
+    b.score-a.score || b.orders_raw-a.orders_raw || b.plpViews-a.plpViews || a.guid-b.guid);
+  const pools = {};
+  BKEYS.forEach(k => pools[k] = order.filter(o=>o.bucket===k).map(o=>o.guid));
+  pools['*'] = order.map(o=>o.guid);
+
+  const by = Object.fromEntries(sc.map(o=>[o.guid,o]));
   const done = new Set();
-  const topN = RULES.exclude_out_of_stock_from_top_n;
+  const topN = CFG0.rules.exclude_out_of_stock_from_top_n;
 
   function take(slot, position) {
-    const chain = CHAIN[slot] || [slot];
-    for (let d = 0; d < chain.length; d++) {
-      const pool = pools[chain[d]];
-      if (!pool) continue;
+    for (const [d,name] of chain(slot).entries()) {
+      const pool = pools[name]; if (!pool) continue;
       while (pool.length) {
         let guid = pool[0];
         if (done.has(guid)) { pool.shift(); continue; }
-        if (position <= topN && !by[guid].inStock) {
-          const nxt = pool.find(g => !done.has(g) && by[g].inStock);
+        if (position <= topN && by[guid].inStock === false) {
+          const nxt = pool.find(g => !done.has(g) && by[g].inStock !== false);
           if (nxt === undefined) break;
           guid = nxt;
         }
-        pool.splice(pool.indexOf(guid), 1);
-        done.add(guid);
-        return { guid, from: chain[d], fallback: d > 0 };
+        pool.splice(pool.indexOf(guid),1); done.add(guid);
+        return { guid, from:name, fallback:d>0 };
       }
     }
     return null;
   }
 
-  const nBatches = Math.ceil(scored.length/10);
-  const out = [];
-  let position = 0;
-  for (let b = 0; b < nBatches; b++) {
-    for (const slot of templateFor(b)) {
-      if (done.size >= scored.length) break;
+  const out = []; let position = 0, setNo = 0;
+  while (done.size < sc.length) {
+    setNo++; let progressed = false;
+    for (const slot of template) {
+      if (done.size >= sc.length) break;
       position++;
       const got = take(slot, position);
       if (!got) { position--; continue; }
-      out.push({...by[got.guid], position, batch:b+1, slot,
-                filled_by:got.from, fallback:got.fallback});
+      progressed = true;
+      out.push({...by[got.guid], position, set:setNo, slot,
+                filled_by:got.from, fallback:got.fallback, boost:false});
     }
+    if (!progressed) break;
   }
-  byScore.filter(p=>!done.has(p.guid)).forEach(p => {
-    position++;
-    out.push({...p, position, batch:Math.floor((position-1)/10)+1,
-              slot:'–', filled_by:'overflow', fallback:true});
-  });
 
-  if (RULES.out_of_stock_to_end) {
-    out.sort((a,b) => (b.inStock-a.inStock) || (a.position-b.position));
-    out.forEach((o,i) => { o.position = i+1; o.batch = Math.floor(i/10)+1; });
+  if (CFG0.rules.out_of_stock_to_end) {
+    out.sort((a,b)=>((b.inStock!==false)-(a.inStock!==false)) || a.position-b.position);
+    out.forEach((o,i)=>{ o.position=i+1; o.set=Math.floor(i/template.length)+1; });
   }
   return out;
 }
-/* Deterministic shuffle so the F pick is stable across refreshes in a session
-   (requirement 6) while still being an arbitrary pick from the boost list. */
-function shuffleStable(arr) {
-  let s = 7;
-  const a = [...arr];
-  for (let i = a.length-1; i > 0; i--) {
-    s = (s*1103515245 + 12345) & 0x7fffffff;
-    const j = s % (i+1);
-    [a[i],a[j]] = [a[j],a[i]];
+
+/* The template deals the whole catalogue, so a boosted SKU already sits
+   somewhere on the page. It is LIFTED from that natural position and
+   re-inserted at the configured one — which is what lets a set carry 30+x while
+   every SKU still appears exactly once. The products it jumps keep their order. */
+function applyBoosts(base, sc) {
+  if (!boosts.length) return base;
+  const size = template.length, per = CFG0.boost.max_per_set;
+  const rows = Object.fromEntries(base.map(r=>[r.guid,r]));
+  const usedPerSet = {}, accepted = [], lifted = new Set();
+  for (const e of [...boosts].sort((a,b)=>a.position-b.position)) {
+    const r = rows[e.guid];
+    if (!r || lifted.has(e.guid)) continue;
+    if (r.inStock === false) continue;
+    const s = Math.floor((e.position-1)/size);
+    if ((usedPerSet[s]||0) >= per) continue;
+    usedPerSet[s] = (usedPerSet[s]||0)+1;
+    lifted.add(e.guid);
+    accepted.push(e);
   }
-  return a;
+  if (!accepted.length) return base;
+  const seq = base.filter(r=>!lifted.has(r.guid)).map(r=>({...r}));
+  accepted.sort((a,b)=>b.position-a.position).forEach(e => {
+    seq.splice(Math.min(Math.max(e.position-1,0),seq.length), 0,
+      {...rows[e.guid], slot:'F', filled_by:'boost', fallback:false, boost:true});
+  });
+  seq.forEach((o,i)=>{ o.position=i+1; o.set=Math.floor(i/size)+1; });
+  return seq;
 }
 
 /* ---------- header ---------- */
 document.getElementById('metaline').textContent =
-  `${META.page} · ${META.liveSkuCount} live products · window ${META.windowStart} → ${META.windowEnd} · ${CFG0.window.days}-day basis`;
+  `${META.page} · ${fmt(META.skuCount)} products (` +
+  Object.entries(META.poolCounts).map(([k,v])=>`${v} ${k.toLowerCase()}s`).join(', ') +
+  `) · flower order window ${META.windowStart} → ${META.windowEnd}`;
 
-document.getElementById('flags').innerHTML = [
-  !META.stockDataAvailable && `<div class="flag err"><b>Stock status not supplied.</b> Every product is treated as in stock, so the three out-of-stock rules are implemented but untested. Send a <code>GUID, in_stock</code> column to activate them.</div>`,
-  !META.windowConfirmed && `<div class="flag">GA4 extracts arrived without a stated date range and are assumed to match the ${CFG0.window.days}-day order window. They are currently a longer aggregate, so CTR and PDP rates read high — re-pull at 30 days before quoting these figures.</div>`,
-].filter(Boolean).join('');
+(function buildFlags(){
+  const over = ALL.filter(p=>p.plpClicks>0 && p.pdpAtc/p.plpClicks>1).length;
+  const combos = ALL.filter(p=>p.productType==='Combo');
+  const comboNoOrders = combos.filter(p=>p.orders===0).length;
+  const f = [];
+  f.push(`<div class="flag err"><b>Combo orders are not being captured.</b> Only
+    ${combos.length-comboNoOrders} of ${combos.length} combos report a purchase, so two of the four
+    signals read zero for almost the whole Combo bucket.</div>`);
+  f.push(`<div class="flag"><b>${over} products exceed 100% on ATC rate</b> under the PRD's
+    "÷ clicks" definition. Switch the denominator to PDP views below to see the difference.</div>`);
+  if (!META.stockDataAvailable) f.push(`<div class="flag"><b>No stock status supplied.</b>
+    Everything is treated as in stock, so the two out-of-stock rules are implemented but untested.</div>`);
+  if (!META.windowConfirmed) f.push(`<div class="flag">The GA4 extracts arrived without a stated date
+    range, and the three pools are measured on three different listing pages
+    (${Object.values(META.sources).join(', ')}). Confirm before quoting figures.</div>`);
+  document.getElementById('flags').innerHTML = f.join('');
+})();
 
-/* ---------- weight sliders ---------- */
-document.getElementById('weights').innerHTML = SIGNALS.map(s => `
+/* ---------- weights ---------- */
+document.getElementById('weights').innerHTML = SIGNALS.map(s=>`
   <div class="ctl">
     <label for="w_${s}"><span>${SIGLABEL[s]}</span><b id="v_${s}"></b></label>
     <input type="range" id="w_${s}" min="0" max="1" step="0.01">
   </div>`).join('');
-
-function syncW() {
-  SIGNALS.forEach(s => {
-    document.getElementById('w_'+s).value = W[s];
-    document.getElementById('v_'+s).textContent = Math.round(W[s]*100)+'%';
+function syncW(){
+  SIGNALS.forEach(s=>{
+    document.getElementById('w_'+s).value=W[s];
+    document.getElementById('v_'+s).textContent=Math.round(W[s]*100)+'%';
   });
-  const t = SIGNALS.reduce((a,s)=>a+W[s],0);
-  const bar = document.getElementById('sumbar');
-  const off = Math.abs(t-1) > 0.005;
-  bar.className = 'sumbar' + (off ? ' bad' : '');
+  const t=SIGNALS.reduce((a,s)=>a+W[s],0), off=Math.abs(t-1)>0.005;
+  const bar=document.getElementById('sumbar');
+  bar.className='sumbar'+(off?' bad':'');
   bar.textContent = off
     ? `Weights sum to ${Math.round(t*100)}%, not 100%. Ranking still works — scores scale uniformly — but they no longer read as shares.`
     : 'Weights sum to 100%.';
 }
-SIGNALS.forEach(s => document.getElementById('w_'+s)
-  .addEventListener('input', e => { W[s] = +e.target.value; syncW(); render(); }));
-document.getElementById('smooth').onchange = e => { K = +e.target.value; render(); };
-document.getElementById('resetW').onclick = () => {
-  W = {...CFG0.weights}; K = CFG0.smoothing_k;
-  document.getElementById('smooth').value = String(K);
+SIGNALS.forEach(s=>document.getElementById('w_'+s)
+  .addEventListener('input',e=>{W[s]=+e.target.value;syncW();render();}));
+
+const $ = id => document.getElementById(id);
+$('dnAtc').onchange = e=>{DN.atc=e.target.value;render();};
+$('dnCvr').onchange = e=>{DN.conversion=e.target.value;render();};
+$('norm').onchange  = e=>{NORM=e.target.value;render();};
+$('smooth').onchange= e=>{K=+e.target.value;render();};
+$('floor').onchange = e=>{FLOOR=+e.target.value;render();};
+$('resetScore').onclick = ()=>{
+  W={...CFG0.weights}; K=CFG0.smoothing_k; NORM=CFG0.normalisation||'minmax';
+  FLOOR=CFG0.impression_floor; DN={...CFG0.denominators};
+  $('dnAtc').value=DN.atc; $('dnCvr').value=DN.conversion;
+  $('norm').value=NORM; $('smooth').value=String(K); $('floor').value=FLOOR;
   syncW(); render();
 };
 
-/* ---------- template editor ---------- */
-function renderTemplates() {
-  const defs = [['batch_1','Batch 1'],['batch_2','Batch 2'],['batch_default','Batch 3+']];
-  document.getElementById('templates').innerHTML = defs.map(([key,label]) => `
-    <div class="tmpl">
-      <h4>${label}</h4>
-      ${templates[key].map((s,i)=>`
-        <div class="pos">
-          <small>${i+1}</small>
-          <select data-tpl="${key}" data-i="${i}">
-            ${SLOTS.map(o=>`<option value="${o}"${o===s?' selected':''}>${o}</option>`).join('')}
-          </select>
-        </div>`).join('')}
-    </div>`).join('');
-  document.querySelectorAll('[data-tpl]').forEach(sel => {
-    sel.onchange = e => {
-      templates[e.target.dataset.tpl][+e.target.dataset.i] = e.target.value;
-      render();
-    };
-  });
-}
-const mMin=document.getElementById('mMin'), mMax=document.getElementById('mMax'),
-      hMin=document.getElementById('hMin'), nDays=document.getElementById('newDays');
-function syncBands() {
-  mMin.value = bands.M.min; mMax.value = bands.M.max;
-  hMin.value = bands.H.min; nDays.value = newDays;
-}
-[mMin,mMax,hMin,nDays].forEach(el => el.onchange = () => {
-  bands.M.min = +mMin.value; bands.M.max = +mMax.value;
-  bands.H.min = +hMin.value; newDays = +nDays.value;
-  render();
-});
-document.getElementById('resetT').onclick = () => {
-  bands = JSON.parse(JSON.stringify(CFG0.price_bands));
-  templates = JSON.parse(JSON.stringify(CFG0.templates));
-  newDays = CFG0.new_arrival_days;
-  syncBands(); renderTemplates(); render();
-};
+/* ---------- template ---------- */
+document.getElementById('bucketLegend').innerHTML =
+  BKEYS.map(k=>`<span><i style="background:var(--b-${k})"></i>${k} · ${BK[k].label}</span>`).join('')
+  + `<span><i style="background:var(--b-F)"></i>F · Boost</span>`;
 
-/* ---------- manual lists ---------- */
-function fillPickers() {
-  const opts = [...ALL].sort((a,b)=>a.title.localeCompare(b.title))
-    .map(p=>`<option value="${p.guid}">${p.title} — ${inr(p.price)}</option>`).join('');
-  ['boostPick','newPick'].forEach(id => {
-    const el = document.getElementById(id);
-    el.innerHTML = `<option value="">Add a product…</option>` + opts;
+function renderTemplate(){
+  $('template').innerHTML = `<div class="tmpl">` + template.map((s,i)=>`
+    <div class="pos"><small>${i+1}</small>
+      <select data-i="${i}">${BKEYS.map(o=>`<option value="${o}"${o===s?' selected':''}>${o}</option>`).join('')}</select>
+    </div>`).join('') + `</div>`;
+  document.querySelectorAll('[data-i]').forEach(sel=>{
+    sel.onchange = e=>{ template[+e.target.dataset.i]=e.target.value; renderTemplate(); render(); };
   });
+  const c={}; template.forEach(s=>c[s]=(c[s]||0)+1);
+  $('tmplCounts').textContent = BKEYS.map(k=>`${k} ${c[k]||0}`).join(' · ') + ` · total ${template.length}`;
 }
-function renderChosen() {
-  const byId = Object.fromEntries(ALL.map(p=>[p.guid,p]));
-  const draw = (list, elId, kind) =>
-    document.getElementById(elId).innerHTML = list.length
-      ? list.map(g=>`<span>${byId[g]?.title ?? g}<b data-kind="${kind}" data-g="${g}">×</b></span>`).join('')
-      : `<span style="background:none;color:var(--ink-muted);padding-left:0">none — slot falls back</span>`;
-  draw(boost,'boostChosen','boost');
-  draw(manualNew,'newChosen','new');
-  document.querySelectorAll('.chosen b').forEach(b => b.onclick = () => {
-    const g = +b.dataset.g;
-    if (b.dataset.kind === 'boost') boost = boost.filter(x=>x!==g);
-    else manualNew = manualNew.filter(x=>x!==g);
-    renderChosen(); render();
-  });
-}
-document.getElementById('boostPick').onchange = e => {
-  const g = +e.target.value; if (g && !boost.includes(g)) boost.push(g);
-  e.target.value = ''; renderChosen(); render();
-};
-document.getElementById('newPick').onchange = e => {
-  const g = +e.target.value; if (g && !manualNew.includes(g)) manualNew.push(g);
-  e.target.value = ''; renderChosen(); render();
-};
+$('resetTmpl').onclick = ()=>{ template=[...CFG0.template]; renderTemplate(); render(); };
 
-/* ---------- tooltip ---------- */
-const tip = document.getElementById('tip');
-function showTip(e, html) {
-  tip.innerHTML = html; tip.style.opacity = 1;
-  const r = tip.getBoundingClientRect();
-  let x = e.clientX+14, y = e.clientY+14;
-  if (x+r.width > innerWidth-8) x = e.clientX-r.width-14;
-  if (y+r.height > innerHeight-8) y = e.clientY-r.height-14;
-  tip.style.left = x+'px'; tip.style.top = y+'px';
+/* ---------- boosts ---------- */
+function fillBoostPicker(){
+  $('boostPick').innerHTML = `<option value="">Choose a product…</option>` +
+    [...ALL].sort((a,b)=>a.title.localeCompare(b.title))
+      .map(p=>`<option value="${p.guid}">${p.title} — ${p.productType}${p.price?' · '+inr(p.price):''}</option>`).join('');
 }
-const hideTip = () => tip.style.opacity = 0;
-const SVGNS = 'http://www.w3.org/2000/svg';
-const el = (t,a={},txt) => { const n=document.createElementNS(SVGNS,t);
-  for (const k in a) n.setAttribute(k,a[k]); if (txt!=null) n.textContent=txt; return n; };
+$('boostAdd').onclick = ()=>{
+  const g=+$('boostPick').value, pos=+$('boostPos').value;
+  if(!g||!pos) return;
+  if(boosts.some(b=>b.guid===g)) return;
+  boosts.push({guid:g, position:pos});
+  $('boostPick').value=''; renderBoosts(); render();
+};
+function renderBoosts(){
+  const by=Object.fromEntries(ALL.map(p=>[p.guid,p]));
+  const size=template.length, per=CFG0.boost.max_per_set;
+  const bySet={}; boosts.forEach(b=>{const s=Math.floor((b.position-1)/size)+1; bySet[s]=(bySet[s]||0)+1;});
+  $('boostList').innerHTML = boosts.length
+    ? [...boosts].sort((a,b)=>a.position-b.position).map(b=>{
+        const s=Math.floor((b.position-1)/size)+1;
+        const over = bySet[s]>per;
+        return `<span><span class="slot F">F</span> position ${b.position} (set ${s})
+          · ${by[b.guid]?.title ?? b.guid}
+          ${over?`<span class="bad">set ${s} over the limit of ${per}</span>`:''}
+          <b data-g="${b.guid}">×</b></span>`;
+      }).join('')
+    : `<span style="background:none;padding-left:0;color:var(--ink-muted)">No insertions — the page runs the base template.</span>`;
+  document.querySelectorAll('#boostList b').forEach(x=>x.onclick=()=>{
+    boosts=boosts.filter(b=>b.guid!==+x.dataset.g); renderBoosts(); render();
+  });
+}
+
+/* ---------- tooltip + svg ---------- */
+const tip=$('tip');
+function showTip(e,html){
+  tip.innerHTML=html; tip.style.opacity=1;
+  const r=tip.getBoundingClientRect();
+  let x=e.clientX+14,y=e.clientY+14;
+  if(x+r.width>innerWidth-8) x=e.clientX-r.width-14;
+  if(y+r.height>innerHeight-8) y=e.clientY-r.height-14;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+const hideTip=()=>tip.style.opacity=0;
+const SVGNS='http://www.w3.org/2000/svg';
+const el=(t,a={},txt)=>{const n=document.createElementNS(SVGNS,t);
+  for(const k in a) n.setAttribute(k,a[k]); if(txt!=null) n.textContent=txt; return n;};
 
 /* ---------- KPIs ---------- */
-function renderKpis(rows) {
-  const top10 = rows.slice(0,10);
-  const fb = rows.filter(r=>r.fallback).length;
-  const mix = {};
-  top10.forEach(r => mix[r.filled_by] = (mix[r.filled_by]||0)+1);
-  const mixStr = ['M','H','N','F','LOW'].filter(k=>mix[k]).map(k=>`${mix[k]}${k}`).join(' · ');
-  const k = [
-    [fmt(rows.length), 'Products sequenced'],
-    [mixStr || '—', 'Top-10 actual mix'],
-    [inr(top10.reduce((a,b)=>a+b.price,0)/10), 'Top-10 average price'],
-    [fmt(top10.reduce((a,b)=>a+b.orders,0)), 'Top-10 orders in window'],
-    [`${Math.round(100*fb/rows.length)}%`, 'Positions filled by fallback'],
+function renderKpis(rows){
+  const top30=rows.slice(0,30);
+  const mix={}; top30.forEach(r=>mix[r.productType]=(mix[r.productType]||0)+1);
+  const fb=rows.filter(r=>r.fallback).length;
+  const prices=top30.map(r=>r.price).filter(v=>v!=null);
+  const k=[
+    [fmt(rows.length),'Products sequenced'],
+    [Object.entries(mix).map(([t,n])=>`${n} ${t[0]}`).join(' · '),'Top-30 mix (F/C/H)'],
+    [prices.length?inr(prices.reduce((a,b)=>a+b,0)/prices.length):'—','Top-30 average price'],
+    [fmt(top30.reduce((a,b)=>a+(b.orders||0),0)),'Top-30 orders in window'],
+    [`${Math.round(100*fb/rows.length)}%`,'Positions via fallback'],
+    [fmt(boosts.length),'Boost insertions'],
   ];
-  document.getElementById('kpis').innerHTML = k.map(([v,l]) =>
-    `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('kpis').innerHTML=k.map(([v,l])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
 }
 
-/* ---------- pool chart ---------- */
-function renderPools(scored) {
-  const nB = Math.ceil(scored.length/10);
-  const demand = {};
-  for (let i=0;i<nB;i++) templateFor(i).forEach(s => demand[s]=(demand[s]||0)+1);
-  const supply = {
-    M: scored.filter(p=>p.band==='M').length,
-    H: scored.filter(p=>p.band==='H').length,
-    N: scored.filter(p=>p.isNewArrival).length,
-    F: boost.length,
-    LOW: scored.filter(p=>p.band==='LOW').length,
-  };
-  const rows = ['M','H','N','F','LOW'].map(s => ({
-    s, supply: supply[s], demand: demand[s]||0,
-    short: Math.max((demand[s]||0)-supply[s], 0),
-  }));
+/* ---------- bucket supply chart ---------- */
+function renderPools(sc){
+  const nSets=Math.ceil(sc.length/template.length);
+  const c={}; template.forEach(s=>c[s]=(c[s]||0)+1);
+  const rows=BKEYS.map(k=>{
+    const supply=sc.filter(o=>o.bucket===k).length;
+    const slots=c[k]||0;
+    return {k,label:BK[k].label,supply,slots,
+      demand:slots*nSets, sets: slots? Math.floor(supply/slots):0};
+  });
+  const svg=$('pools'); svg.textContent='';
+  const W_=900,H=250,L=56,R=215,T=8,B=36,pw=W_-L-R,ph=H-T-B;
+  const max=Math.max(...rows.map(r=>Math.max(r.supply,r.demand)),10)*1.08;
+  const x=v=>(v/max)*pw, rowH=ph/rows.length, barH=10;
 
-  const svg = document.getElementById('pools'); svg.textContent='';
-  const W_=900,H=230,L=46,R=190,T=8,B=34, pw=W_-L-R, ph=H-T-B;
-  const max = Math.max(...rows.flatMap(r=>[r.supply,r.demand]), 10)*1.08;
-  const x = v => (v/max)*pw;
-  const rowH = ph/rows.length, barH = 10;
-
-  [0,50,100,150,200].filter(v=>v<=max).forEach(v => {
+  [0,25,50,75,100].filter(v=>v<=max).forEach(v=>{
     svg.append(el('line',{x1:L+x(v),x2:L+x(v),y1:T,y2:T+ph,class:'gridline'}));
-    svg.append(el('text',{x:L+x(v),y:T+ph+17,class:'tick','text-anchor':'middle'},v));
+    svg.append(el('text',{x:L+x(v),y:T+ph+18,class:'tick','text-anchor':'middle'},v));
   });
   svg.append(el('line',{x1:L,x2:L,y1:T,y2:T+ph,class:'axisline'}));
-  svg.append(el('text',{x:L+pw/2,y:T+ph+32,class:'axlabel','text-anchor':'middle'},'Products'));
+  svg.append(el('text',{x:L+pw/2,y:T+ph+33,class:'axlabel','text-anchor':'middle'},'Products'));
 
-  const colOf = s => s==='LOW' ? 'var(--s-low)' : `var(--s-${s.toLowerCase()})`;
-  rows.forEach((r,i) => {
-    const cy = T + i*rowH + rowH/2;
-    svg.append(el('text',{x:L-10,y:cy+4,class:'tick','text-anchor':'end'}, r.s));
-    [[r.supply,colOf(r.s),-barH-1,'supply'],[r.demand,'var(--ink-muted)',1,'seats wanted']]
-      .forEach(([v,col,off,lab]) => {
-        const rect = el('rect',{x:L,y:cy+off,width:Math.max(x(v),2),height:barH,fill:col,rx:4,ry:4});
-        rect.style.cursor='pointer';
-        rect.addEventListener('mousemove', e => showTip(e,
-          `<b>${r.s} — ${lab}</b><span>${v} products</span>` +
-          (r.short ? `<span>short by ${r.short}, fallback covers it</span>` : '')));
-        rect.addEventListener('mouseleave', hideTip);
-        svg.append(rect);
-      });
+  rows.forEach((r,i)=>{
+    const cy=T+i*rowH+rowH/2;
+    svg.append(el('text',{x:L-10,y:cy+4,class:'tick','text-anchor':'end'},r.k));
+    [[r.supply,`var(--b-${r.k})`,-barH-1,'available'],
+     [r.demand,'var(--ink-muted)',1,'seats across all sets']].forEach(([v,col,off,lab])=>{
+      const rect=el('rect',{x:L,y:cy+off,width:Math.max(x(v),2),height:barH,fill:col,rx:4,ry:4});
+      rect.style.cursor='pointer';
+      rect.addEventListener('mousemove',e=>showTip(e,
+        `<b>${r.k} · ${r.label} — ${lab}</b><span>${v} products</span>
+         <span>${r.slots} slot(s) per set of ${template.length}</span>
+         <span>covers ${r.sets} complete set(s)</span>`));
+      rect.addEventListener('mouseleave',hideTip);
+      svg.append(rect);
+    });
     svg.append(el('text',{x:L+Math.max(x(Math.max(r.supply,r.demand)),2)+9,y:cy+4,class:'tick'},
-      r.short ? `${r.supply} / ${r.demand} · short ${r.short}` : `${r.supply} / ${r.demand}`));
+      `${r.supply} available · ${r.sets} full sets`));
   });
 
-  const shorts = rows.filter(r=>r.short);
-  document.getElementById('poolnote').innerHTML = shorts.length
-    ? `Short on ${shorts.map(r=>`<b>${r.s}</b> (${r.short} seats)</b>`).join(', ')}. Those seats draw from the fallback chain instead, so the page still fills — but the deeper batches drift from the intended price mix.`
-    : 'Every slot type has enough products for the seats the template asks for.';
+  // A bucket is short when it cannot cover every set the page needs, not against
+  // some arbitrary depth — the page here runs nSets sets deep.
+  const thin=rows.filter(r=>r.slots>0 && r.sets<nSets).sort((a,b)=>a.sets-b.sets);
+  $('poolnote').innerHTML = thin.length
+    ? `The page runs <b>${nSets} sets</b>. Short of that: ${thin.map(r=>
+        `<b>${r.k}</b> covers ${r.sets}`).join(', ')}. Past that depth those slots draw from a
+       neighbouring band, so the intended mix holds near the top of the page and loosens below.`
+    : `Every bucket covers all ${nSets} sets.`;
 }
 
-/* ---------- page preview ---------- */
-function renderBatches(rows) {
-  const limit = +document.getElementById('nbatch').value;
-  const maxB = Math.min(limit, Math.max(...rows.map(r=>r.batch)));
-  document.getElementById('pagecount').textContent =
-    `Showing batches 1–${maxB} of ${Math.max(...rows.map(r=>r.batch))}.`;
-  const out = [];
-  for (let b=1; b<=maxB; b++) {
-    const items = rows.filter(r=>r.batch===b);
-    out.push(`<div class="batch"><h3>Batch ${b} · positions ${items[0].position}–${items[items.length-1].position}</h3>` +
-      items.map(r => `
-        <div class="row ${r.fallback?'fb':''}">
-          <span class="n">${r.position}</span>
-          <span class="slot ${r.slot==='–'?'dash':r.slot}">${r.slot}</span>
-          <span class="t" title="${r.title.replace(/"/g,'&quot;')}">${r.title}${
-            r.fallback ? ` <span class="fbmark">●${r.filled_by}</span>` : ''}</span>
-          <span class="p">${inr(r.price)}</span>
-        </div>`).join('') + `</div>`);
+/* ---------- the page ---------- */
+function renderSets(rows){
+  const limit=+$('nsets').value;
+  const maxSet=Math.min(limit,Math.max(...rows.map(r=>r.set)));
+  $('pagecount').textContent=`Showing sets 1–${maxSet} of ${Math.max(...rows.map(r=>r.set))}.`;
+  const out=[];
+  for(let s=1;s<=maxSet;s++){
+    const items=rows.filter(r=>r.set===s); if(!items.length) continue;
+    out.push(`<div class="set"><h3>Set ${s} · positions ${items[0].position}–${items[items.length-1].position}</h3>`+
+      items.map(r=>`<div class="row ${r.fallback?'fb':''}">
+        <span class="n">${r.position}</span>
+        <span class="slot ${r.slot}">${r.slot}</span>
+        <span class="t" title="${String(r.title).replace(/"/g,'&quot;')}">${r.title}${
+          r.fallback?` <span class="fbmark">●${r.filled_by}</span>`:''}</span>
+        <span class="p">${r.price!=null?inr(r.price):r.productType}</span>
+      </div>`).join('')+`</div>`);
   }
-  document.getElementById('batches').innerHTML = out.join('');
+  $('sets').innerHTML=out.join('');
 }
-document.getElementById('nbatch').onchange = () => renderBatches(placed);
+$('nsets').onchange=()=>renderSets(placed);
 
 /* ---------- table ---------- */
-document.querySelectorAll('#tbl th').forEach(th => th.onclick = () => {
-  const k = th.dataset.k;
-  sortDir = sortKey===k ? -sortDir : (k==='position'||k==='batch' ? 1 : -1);
-  sortKey = k; renderTable();
+document.querySelectorAll('#tbl th').forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k;
+  sortDir = sortKey===k ? -sortDir : (k==='position'||k==='set'?1:-1);
+  sortKey=k; renderTable();
 });
-function renderTable() {
-  const r = [...placed].sort((a,b) => {
+function renderTable(){
+  const r=[...placed].sort((a,b)=>{
     const va=a[sortKey], vb=b[sortKey];
-    if (typeof va === 'string') return sortDir*String(va).localeCompare(String(vb));
+    if(va==null) return 1; if(vb==null) return -1;
+    if(typeof va==='string') return sortDir*String(va).localeCompare(String(vb));
     return sortDir*(va-vb);
   });
-  document.querySelector('#tbl tbody').innerHTML = r.map(p => `
+  document.querySelector('#tbl tbody').innerHTML=r.map(p=>`
     <tr>
       <td class="num">${p.position}</td>
-      <td class="num">${p.batch}</td>
-      <td><span class="slot ${p.slot==='–'?'dash':p.slot}">${p.slot}</span></td>
-      <td class="name">${p.title}${p.isNewArrival?'<span class="tag">new</span>':''}${
-        p.isBoost?'<span class="tag">boost</span>':''}${
+      <td class="num">${p.set}</td>
+      <td><span class="slot ${p.slot}">${p.slot}</span></td>
+      <td class="name">${p.title}${p.boost?'<span class="tag">boost</span>':''}${
+        p.belowFloor?'<span class="tag">thin data</span>':''}${
         p.fallback?`<span class="tag">via ${p.filled_by}</span>`:''}</td>
-      <td class="num">${inr(p.price)}</td>
-      <td>${p.band}</td>
-      <td class="num">${pct(p.ctr_raw)}</td>
-      <td class="num">${pct(p.atc_pdp_raw,1)}</td>
-      <td class="num">${pct(p.conversion_raw,1)}</td>
+      <td>${p.productType}</td>
+      <td class="num">${p.price!=null?inr(p.price):'—'}</td>
+      <td class="num">${fmt(p.plpViews)}</td>
+      <td class="num">${pct(p.ctr_raw,2)}</td>
+      <td class="num${p.atc_raw>1?' bad':''}">${pct(p.atc_raw)}</td>
+      <td class="num${p.conversion_raw>1?' bad':''}">${pct(p.conversion_raw)}</td>
       <td class="num">${fmt(p.orders)}</td>
       <td class="num">${p.score.toFixed(3)}</td>
     </tr>`).join('');
 }
 
-document.getElementById('csv').onclick = () => {
-  const cols = ['position','batch','slot','filled_by','fallback','guid','sku','title','price',
-                'band','plpViews','plpClicks','pdpViews','pdpAtc','orders','score'];
-  const body = placed.map(p => cols.map(c => {
-    const v = p[c];
-    return typeof v === 'string' && /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
-  }).join(','));
-  saveCsv('listing_sequence_all_flowers.csv', cols.join(',')+'\n'+body.join('\n'));
+/* ---------- exports ---------- */
+$('seqExport').onclick = ()=>{
+  const rows=[...placed].sort((a,b)=>a.position-b.position)
+    .map(p=>`${p.guid}|${p.title}|${p.position}`);
+  saveText('all_flowers_sequence.txt','nid|product name|index\n'+rows.join('\n'));
 };
-async function saveCsv(filename, text) {
-  const host = await window.claude?.use?.('downloads').catch(()=>null);
-  if (host) { await host.save({ filename, data: text }); return; }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text],{type:'text/csv'}));
-  a.download = filename; a.click(); URL.revokeObjectURL(a.href);
+$('csv').onclick = ()=>{
+  const cols=['position','set','slot','filled_by','fallback','boost','guid','title','productType',
+              'price','bucket','plpViews','plpClicks','pdpViews','pdpAtc','orders','score'];
+  const body=[...placed].sort((a,b)=>a.position-b.position).map(p=>cols.map(c=>{
+    const v=p[c];
+    return typeof v==='string' && /[",\n]/.test(v) ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(','));
+  saveText('listing_sequence_all_flowers.csv',cols.join(',')+'\n'+body.join('\n'));
+};
+async function saveText(filename,text){
+  const host=await window.claude?.use?.('downloads').catch(()=>null);
+  if(host){ await host.save({filename,data:text}); return; }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'}));
+  a.download=filename; a.click(); URL.revokeObjectURL(a.href);
 }
 
-document.getElementById('theme').onclick = () => {
-  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
-  const cur = document.documentElement.dataset.theme || (dark?'dark':'light');
-  document.documentElement.dataset.theme = cur==='dark' ? 'light' : 'dark';
+$('theme').onclick=()=>{
+  const dark=matchMedia('(prefers-color-scheme: dark)').matches;
+  const cur=document.documentElement.dataset.theme||(dark?'dark':'light');
+  document.documentElement.dataset.theme = cur==='dark'?'light':'dark';
   render();
 };
 
-function render() {
-  const scored = scoreAll();
-  placed = allocate(scored);
-  renderKpis(placed);
-  renderPools(scored);
-  renderBatches(placed);
-  renderTable();
+function render(){
+  scored = scoreAll();
+  placed = applyBoosts(allocate(scored), scored);
+  renderKpis(placed); renderPools(scored); renderSets(placed); renderTable();
 }
-syncW(); syncBands(); renderTemplates(); fillPickers(); renderChosen(); render();
+$('dnAtc').value=DN.atc; $('dnCvr').value=DN.conversion;
+$('norm').value=NORM; $('smooth').value=String(K); $('floor').value=FLOOR;
+syncW(); renderTemplate(); fillBoostPicker(); renderBoosts(); render();
 </script>
 </body>
 </html>

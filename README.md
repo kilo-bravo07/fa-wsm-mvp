@@ -1,14 +1,13 @@
 # Listing Page Sequencing — FlowerAura `/all-flowers`
 
-An MVP of the listing-page sequencing algorithm: products are scored on four
-behavioural signals, then dealt into a repeating ten-slot template that holds a price
-mix, a new-arrival seat and a featured seat. Every weight, band and slot is editable in
-the browser so a reviewer can see the page re-sequence live.
+Products are scored on four behavioural signals, then dealt into a repeating thirty-slot
+template holding five price bands plus combos and hampers. Boosted SKUs are inserted on
+top, outside the thirty. Every weight, slot and insertion is editable in the browser.
 
 **[Open the viewer →](https://kilo-bravo07.github.io/fa-wsm-mvp/)**
 
-The earlier Weighted Sequence Model port (the Bakingo six-metric design) is kept at
-[`docs/wsm-v1.html`](docs/wsm-v1.html) for reference. This page supersedes it.
+Earlier versions are kept for reference: [`docs/wsm-v1.html`](docs/wsm-v1.html) is the
+original Bakingo six-metric port.
 
 ---
 
@@ -16,81 +15,120 @@ The earlier Weighted Sequence Model port (the Bakingo six-metric design) is kept
 
 | Signal | Definition | Weight |
 |---|---|---|
-| Click-through rate | PLP clicks ÷ PLP impressions | 35% |
-| Add-to-cart PDP rate | PDP add-to-cart ÷ PDP views | 25% |
-| Conversion rate (SKU) | orders ÷ PLP clicks | 20% |
+| Click-through rate | clicks ÷ impressions | 35% |
+| ATC rate | PDP add-to-carts ÷ clicks | 25% |
+| Conversion rate | orders ÷ clicks | 20% |
 | Overall SKU orders | order count | 20% |
 
-Each signal is normalised 0–1 across the page before weighting. Rates are smoothed
-toward the site average first.
+Each is normalised 0–1 across the catalogue before weighting. Rates are smoothed toward
+the site average first, and a product below the impression floor takes the median score of
+its own bucket rather than being scored on noise.
 
-## Step 2 — Slots
-
-The page is dealt in batches of ten. Each position asks for a slot type, and the type
-takes the highest-scoring unplaced product from its pool.
-
-| Slot | Rule |
-|---|---|
-| **M** Medium | price ₹750–1200, highest score |
-| **H** High | price above ₹1200, highest score |
-| **N** New arrival | launched in the last 30 days, highest score |
-| **F** Featured | drawn from the manual boost list |
+## Step 2 — The thirty-slot template
 
 ```
-Batch 1    M M H M F M N M H M
-Batch 2    M M H M F M N M H M
-Batch 3+   M M H M F M N M M M
+L  M  C  L  U  P  M  L  H  C
+U  L  P  M  V  L  C  U  P  M
+L  H  C  U  P  M  V  L  C  P
 ```
 
-## Step 3 — The rest
+| Slot | Bucket | Count |
+|---|---|---|
+| L | Under ₹1,000 | 7 |
+| M | ₹1,000–1,499 | 5 |
+| U | ₹1,500–1,999 | 4 |
+| H | ₹2,000–2,499 | 2 |
+| V | Above ₹2,500 | 2 |
+| C | Combo | 5 |
+| P | Hamper | 5 |
 
-The same template continues to the end of the catalogue. Out-of-stock products are
-barred from the top 10 and sink to the page tail.
+Each slot takes the highest-scoring unplaced product from its bucket. A product is claimed
+by the first bucket in `precedence` it qualifies for — combo and hamper outrank price bands
+— which is what guarantees one SKU, one placement. The template repeats to the end of the
+catalogue.
+
+## Step 3 — Boost insertions
+
+Up to four per set. The template deals the whole catalogue, so a boosted SKU already sits
+somewhere on the page; a boost **lifts it from that position and re-inserts it** at the
+configured one. The set then shows 30+x while every SKU still appears exactly once, and the
+products it jumps keep their relative order.
 
 ---
 
-## The fallback chain
+## The catalogue
 
-The PRD's slot rules don't produce enough products to fill the seats they ask for, so
-every slot falls through an ordered chain when its own pool empties. Measured on the
-current 240-SKU catalogue:
+362 products across three pools with zero overlap:
 
-| Slot | Products available | Seats wanted | Short by |
-|---|---|---|---|
-| M (₹750–1200) | 56 | 166 | **110** |
-| H (>₹1200) | 125 | 26 | — |
-| N (last 30 days) | 12 | 24 | **12** |
-| F (boost list) | 0 | 24 | **24** |
-| LOW (<₹750) | 58 | 0 | — |
+| Pool | Count | Metrics measured on | Price | Launch date |
+|---|---:|---|---|---|
+| Flower | 240 | `/all-flowers` | yes | yes |
+| Hamper | 62 | `/hampers/same-day-delivery` | no | no |
+| Combo | 60 | `/combos/flowers-and-cakes` | no | no |
 
-Two things to note. **58 products priced below ₹750 belong to no band the PRD names** —
-without a fallback they could never be placed at all. And the strict ₹750–1200 M band
-qualifies only 56 products against 166 M seats.
+Combos and hampers go to their own buckets regardless of price, so the missing prices do not
+block the build — but combo-versus-price-band precedence cannot be verified without them.
 
-The chain (`M → LOW → H`, `H → M → LOW`, `N` and `F → M → LOW → H`) resolves both: the
-strict band governs the top of the page, where the price mix actually matters, and every
-product still lands exactly once. It is a config value, not a hard-coded rule.
+---
 
-## Two behaviours worth knowing
+## Three data problems, all visible on the page
 
-**Boosted products are reserved for F seats.** Without this, an M slot takes a boosted
-SKU before its F seat comes round — the boost buys nothing and the F seat falls back to
-an ordinary product. Set `rules.reserve_boost_for_f` to `false` to disable.
+**Combo orders are not being captured.** Only **3 of 60 combos** report a purchase in the PDP
+extract, yet 35 of them sold in the earlier order file — `Mystic Orchids N Cake Combo` at 156
+orders and `Red Rose N Truffle` at 120 both read zero here. Two of the four signals are
+order-derived, so 40% of the combo score is currently zero for almost the whole bucket and the
+Combo slots are decided on CTR and ATC alone. `Make Your Own Combo` takes the top combo slot on
+315 purchases against 1 add-to-cart, which is not credible either.
 
-**The F pick is deterministic.** Requirement 6 asks for the slot to be stable within a
-session, so the "random" draw from the boost list uses a fixed seed rather than
-`Math.random()`.
+**The "÷ clicks" denominators do not work on this data.** It is what the PRD specifies and what
+the page loads with, but add-to-carts and orders arrive through routes that never touched the
+listing while clicks are counted only on it. Measured: **213 of 346 products exceed 100%** on
+ATC rate, median 132%, maximum 1,000%. Switched to PDP views, nothing exceeds 100% and the
+median falls to 9.2%. The switch changes **14 of the top 30**, so it is not cosmetic. Both
+denominators are dropdowns in the viewer.
+
+**Three pools, three pages.** A product's CTR reflects whichever listing it was measured on.
+Buckets contain this — combos only compete with combos — but the fallback chain crosses buckets.
+
+Also still missing: stock status (so the two out-of-stock rules are implemented but unverified)
+and a confirmed date window for any of the GA4 extracts.
+
+---
+
+## Bucket depth
+
+The page runs 13 sets. How many each bucket can cover before its slot falls back:
+
+| Bucket | Products | Slots/set | Full sets |
+|---|---:|---:|---:|
+| V Above ₹2,500 | 40 | 2 | 20 |
+| L Under ₹1,000 | 95 | 7 | 13 |
+| C Combo | 60 | 5 | 12 |
+| P Hamper | 62 | 5 | 12 |
+| H ₹2,000–2,499 | 21 | 2 | 10 |
+| M ₹1,000–1,499 | 48 | 5 | 9 |
+| U ₹1,500–1,999 | 35 | 4 | 8 |
+
+The intended mix holds firmly through the first eight sets and loosens below, which is the
+right shape — accuracy where the traffic is.
+
+## Fallback
+
+The PRD says an empty pool borrows the equivalent SKU from a later batch. That cannot
+terminate once a pool is globally exhausted, and pulling a product forward leaves a hole that
+cascades to the end of the page. Instead a price slot falls through to the **nearest band by
+price**, then to the best remaining product of any bucket; combo and hamper slots fall straight
+through to best remaining. It is a config value, not a hard-coded rule.
 
 ---
 
 ## Repository layout
 
 ```
-config/config.json       weights, bands, template, fallback chain, boost + manual-new lists
-src/sequence.py          reference scorer and slot allocator — authoritative maths
-src/build_dataset.py     joins the five extracts -> docs/data.{json,js}
+config/config.json       weights, buckets, template, precedence, fallback, boosts
+src/sequence.py          reference scorer and allocator — authoritative maths
+src/build_dataset.py     merges the three pools -> docs/data.{json,js}
 docs/index.html          the viewer (GitHub Pages serves /docs)
-docs/wsm-v1.html         the superseded Weighted Sequence Model viewer
 tests/test_sequence.py   PRD requirement checks + Python/JavaScript parity
 data/                    source extracts (see data/README.md)
 ```
@@ -100,7 +138,7 @@ data/                    source extracts (see data/README.md)
 ```bash
 pip install -r requirements.txt
 python src/build_dataset.py      # regenerates docs/data.json and docs/data.js
-python -m pytest tests/ -q       # requirement checks + parity (needs node)
+python -m pytest tests/ -q       # 26 checks (needs node for the parity tests)
 open docs/index.html             # works from the filesystem, no server needed
 ```
 
@@ -113,42 +151,17 @@ Publishing: **Settings → Pages → Deploy from branch → `main` / `/docs`**.
 
 | # | Requirement | Status |
 |---|---|---|
-| 1 | Score refreshes on a schedule | Config value; the MVP recomputes on load |
-| 2 | A product appears only once | Tested |
-| 3 | Out-of-stock never in the top 10 | Implemented, tested with synthetic stock data |
-| 4 | Empty pool fills from elsewhere | Implemented as the fallback chain, tested |
+| 1 | Scores refresh every 7 days, configurable | Config value; the MVP recomputes on load |
+| 2 | A product appears only once | Tested, including under boosts |
+| 3 | Out-of-stock never in the top 10 | Implemented, tested against synthetic stock |
+| 4 | Empty slot pool is filled | Fallback chain, tested |
 | 5 | Boost list editable by the category team | Editable in the viewer and in `config.json` |
-| 6 | F pick stable within a session | Deterministic seed |
+| 6 | F pick stable within a session | Deterministic — position-driven, no randomness |
 | 7 | Empty boost list falls back | Tested |
 | 8 | Template, bands and weights configurable | All live in the viewer |
 | 9 | Served from cache, no slowdown | Out of scope for the MVP |
 
-## Known gaps
+## Exports
 
-**Stock status is not in any extract.** Every product is treated as in stock, so the
-three stock rules are implemented and unit-tested against synthetic data but unverified
-against production. A `GUID, in_stock` column activates them.
-
-**The GA4 window is unconfirmed.** The PRD specifies a trailing 30 days. The sales data
-is sliced to the last 30 days available (24 Aug – 22 Sep 2026), but the PLP and PDP
-extracts arrived without a stated range and are a longer aggregate — so CTR and PDP
-rates read high relative to a true 30-day pull. Re-pull both at 30 days before quoting
-figures externally.
-
-**New arrivals run out after a dozen products**, nearly all one Korean range launched on
-a single day, against 24 N seats. Use the manual new-arrival list to seed the pool, or
-accept that N stops appearing partway down the page.
-
-**Three of the four signals share a funnel.** PDP add-to-cart rate, conversion rate and
-order count all measure stages of the same journey, so 65% of the weight sits downstream
-of the click and the three will move together. The effective weighting is more
-concentrated than 35/25/20/20 reads.
-
-## Open questions from the PRD
-
-1. Should products undeliverable to the visitor's pincode be pushed down and greyed out?
-   Not modelled — needs serviceability data per SKU.
-2. Who owns the boost list, and does each boost carry an end date? The config has no
-   expiry field yet; say the word and I'll add one.
-3. Should birthday, anniversary and other pages get their own boost lists? The config is
-   per-page already, so this is a deployment question rather than a code change.
+**Sequence** — `nid|product name|index`, pipe-delimited, 1-based, always in page order.
+**Full CSV** — every column including bucket, slot, fallback source and score.

@@ -1,25 +1,16 @@
 """
-FlowerAura Weighted Sequence Model (WSM) — dataset builder.
+Listing Page Product Sequencing — dataset builder (v3).
 
-Joins the five source extracts into a single model-input file consumed by the
-MVP viewer (docs/index.html).
+Merges three product pools into one catalogue:
 
-Sources
--------
-1. products      — Internal DB / CMS export of every SKU on /all-flowers
-2. plp_metrics   — GA4/BigQuery, item-scoped to the /all-flowers list  -> M1, M2
-3. pdp_metrics   — GA4/BigQuery, product detail page, all categories   -> M4
-4. sales         — Internal DB order lines, 1 Mar - 22 Sep 2026        -> M3, M5
-5. sequence      — Current live ordering of the page                   -> control
+    flowers   240  price + launch date + orders from the sales extract
+    combos     60  from the /combos/flowers-and-cakes GA4 extracts
+    hampers    62  from the /hampers/same-day-delivery GA4 extracts
 
-Output
-------
-docs/data.json — one record per SKU with RAW metric inputs only. All
-normalisation, smoothing and weighting happens client-side so the stakeholder
-can move the weights and watch the ranking respond.
+Output: docs/data.json and docs/data.js, one record per product with RAW metric
+inputs only. Normalisation, smoothing and allocation happen client-side so the
+weights and the template can be moved live.
 
-Usage
------
     python src/build_dataset.py
 """
 
@@ -35,23 +26,11 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 OUT = ROOT / "docs" / "data.json"
-# Also emitted as a plain script so the viewer opens from the filesystem, not
-# only from a web server — reviewers who clone the repo can double-click it.
 OUT_JS = ROOT / "docs" / "data.js"
 
-# --- Analysis window -------------------------------------------------------
-# Set in config/config.json. The PRD specifies a trailing 30 days; the GA4
-# extracts arrived without a stated range and are assumed to match it.
-_CFG = json.loads((ROOT / "config" / "config.json").read_text())
-WINDOW_END = pd.Timestamp(_CFG["window"]["end"])
-WINDOW_START = WINDOW_END - pd.Timedelta(days=_CFG["window"]["days"] - 1)
-AS_OF = WINDOW_END
-NEW_ARRIVAL_DAYS = _CFG["new_arrival_days"]
-
-# Peer groups smaller than this fall back to the page-wide benchmark for M6.
-# With a 3-SKU peer group every member sits within a rupee or two of its own
-# group median and the modifier stops discriminating entirely.
-MIN_PEER_GROUP = 10
+CFG = json.loads((ROOT / "config" / "config.json").read_text())
+WINDOW_END = pd.Timestamp(CFG["window"]["flowers_orders_end"])
+WINDOW_START = WINDOW_END - pd.Timedelta(days=CFG["window"]["days"] - 1)
 
 
 def _read(name: str, **kw) -> pd.DataFrame:
@@ -67,142 +46,129 @@ def norm_name(s: pd.Series) -> pd.Series:
     return s.astype(str).str.strip().str.lower()
 
 
-def primary_bouquet_type(value) -> str:
-    """`Bouquet Type` is multi-valued ("Bunches, Premium"). Take the first token."""
-    if pd.isna(value):
-        return "Unclassified"
-    return str(value).split(",")[0].strip() or "Unclassified"
-
-
-def build() -> dict:
+def build_flowers() -> pd.DataFrame:
     products = _read("products.csv")
     plp = _read("plp_metrics.csv")
     pdp = _read("pdp_metrics.csv")
     sales = _read("sales.csv")
     sequence = _read("current_sequence.csv")
 
-    # ---- products ---------------------------------------------------------
-    products = products.rename(columns={"GUID": "guid", "Title": "title", "Sku": "sku"})
-    products["created"] = pd.to_datetime(
-        products["Create Date and Time"].astype(str).str.split(", ").str[-1],
-        format="%m/%d/%Y - %H:%M",
-        errors="coerce",
+    df = products.rename(columns={"GUID": "guid", "Title": "title", "Sku": "sku"})
+    df["created"] = pd.to_datetime(
+        df["Create Date and Time"].astype(str).str.split(", ").str[-1],
+        format="%m/%d/%Y - %H:%M", errors="coerce",
     )
-    products["peer_raw"] = products["Bouquet Type"].map(primary_bouquet_type)
-
     # `Page display` is null for most rows; only an explicit "Donot display"
-    # takes a product off the page. Corroborated by GA4: the single
-    # "Donot display" SKU is also the only one with zero impressions.
-    products["on_page"] = products["Page display"].fillna("Display").str.strip() != "Donot display"
+    # takes a product off the page, corroborated by its zero impressions in GA4.
+    df["on_page"] = df["Page display"].fillna("Display").str.strip() != "Donot display"
+    df = df[["guid", "title", "sku", "url", "Sell Price", "created", "on_page"]].rename(
+        columns={"Sell Price": "price"}
+    )
+    df["productType"] = "Flower"
 
-    # Peer groups below the floor are pooled so M6 keeps a meaningful benchmark.
-    counts = products["peer_raw"].value_counts()
-    small = set(counts[counts < MIN_PEER_GROUP].index)
-    products["peer_group"] = products["peer_raw"].where(~products["peer_raw"].isin(small), "Other")
-
-    df = products[
-        ["guid", "title", "sku", "url", "Sell Price", "List price", "peer_raw", "peer_group",
-         "created", "on_page", "Best Seller"]
-    ].rename(columns={"Sell Price": "price", "List price": "mrp", "Best Seller": "best_seller"})
-
-    # ---- M1, M2: PLP metrics (join on GUID — verified 240/240) ------------
     plp = plp.rename(columns={
-        "Item ID": "guid", "PLP Views": "plp_views",
-        "PLP Clicks": "plp_clicks", "PLP ATC": "plp_atc",
+        "Item ID": "guid", "PLP Views": "plpViews",
+        "PLP Clicks": "plpClicks", "PLP ATC": "plpAtc",
     })
-    df = df.merge(plp[["guid", "plp_views", "plp_clicks", "plp_atc"]], on="guid", how="left")
+    df = df.merge(plp[["guid", "plpViews", "plpClicks", "plpAtc"]], on="guid", how="left")
 
-    # ---- M4: PDP metrics --------------------------------------------------
-    # This extract carries the whole catalogue (~12.9k rows, 20 categories) and
-    # has no ID column, so we match on name AND restrict to the flower category.
-    # Eight names in the file are duplicated across categories; none are ours,
-    # but the category filter is what guarantees a 1:1 join.
+    # The PDP extract carries the whole catalogue and has no ID column, so match
+    # on name within the flower category. Abort on a collision rather than let
+    # the join silently fan out.
     pdp = pdp[pdp["Item category"] == "flower"].copy()
     pdp["nm"] = norm_name(pdp["Item name"])
     df["nm"] = norm_name(df["title"])
-    # Duplicates exist inside the flower category (e.g. "intellect flower card
-    # product" appears twice) but are irrelevant unless they collide with one of
-    # our SKUs — which would silently fan out the join and double-count M4.
-    collisions = pdp[pdp["nm"].duplicated(keep=False) & pdp["nm"].isin(set(df["nm"]))]["nm"].unique()
-    if len(collisions):
-        sys.exit(f"PDP names collide with our SKUs, join is unsafe: {list(collisions)[:5]}")
-    pdp = pdp[pdp["nm"].isin(set(df["nm"]))]
+    clash = pdp[pdp["nm"].duplicated(keep=False) & pdp["nm"].isin(set(df["nm"]))]["nm"].unique()
+    if len(clash):
+        sys.exit(f"PDP names collide with flower SKUs, join is unsafe: {list(clash)[:5]}")
     df = df.merge(
-        pdp[["nm", "PDP Views", "PDP ATC", "PDP Purchase"]].rename(columns={
-            "PDP Views": "pdp_views", "PDP ATC": "pdp_atc", "PDP Purchase": "pdp_purchase",
-        }),
+        pdp[["nm", "PDP Views", "PDP ATC"]].rename(
+            columns={"PDP Views": "pdpViews", "PDP ATC": "pdpAtc"}),
         on="nm", how="left",
     )
 
-    # ---- M3, M5: sales ----------------------------------------------------
     sales["order_date"] = pd.to_datetime(sales["order_date"], errors="coerce")
     window = sales[(sales["order_date"] >= WINDOW_START) & (sales["order_date"] <= WINDOW_END)]
-
-    # M3 denominator: every flower order in the window, not just our 240 SKUs.
-    total_orders = int(window["order_id"].nunique())
-
-    agg = window.groupby("nid").agg(
-        orders=("order_id", "nunique"),
-        units=("qty", "sum"),
-        revenue=("order_total", "sum"),
-    )
+    agg = window.groupby("nid").agg(orders=("order_id", "nunique"), revenue=("order_total", "sum"))
     df = df.merge(agg, left_on="guid", right_index=True, how="left")
 
-    # Recency uses the FULL sales history, not the window — a SKU last sold in
-    # April is stale regardless of which window we score on.
-    last_order = sales.groupby("nid")["order_date"].max()
-    df = df.merge(last_order.rename("last_order_date"), left_on="guid", right_index=True, how="left")
-    df["days_since_order"] = (AS_OF - df["last_order_date"]).dt.days
-
-    # ---- Control sequence -------------------------------------------------
-    # No ID column in this extract, so matched on name. Verified 240/240 with no
-    # collisions. Production must join on GUID: two SKUs here differ only by an
-    # apostrophe ("Fathers Day Special Box" / "Father's Day Special Box").
     sequence.columns = [c.strip() for c in sequence.columns]
     sequence["nm"] = norm_name(sequence["Product Name"])
-    df = df.merge(sequence[["nm", "Index"]].rename(columns={"Index": "current_index"}), on="nm", how="left")
-    df["current_rank"] = df["current_index"].rank(method="first").astype("Int64")
+    df = df.merge(
+        sequence[["nm", "Index"]].rename(columns={"Index": "currentIndex"}), on="nm", how="left"
+    )
+    return df.drop(columns=["nm"])
 
-    # ---- Integrity checks -------------------------------------------------
-    problems = []
-    for col, label in [
-        ("plp_views", "PLP metrics"), ("pdp_views", "PDP metrics"), ("current_index", "sequence"),
-    ]:
-        missing = df[df[col].isna()]
-        if len(missing):
-            problems.append(f"{len(missing)} SKU(s) missing {label}: {missing['title'].head(3).tolist()}")
-    if problems:
-        print("WARNING — incomplete joins:", *problems, sep="\n  ")
 
-    df["orders"] = df["orders"].fillna(0)
-    df["units"] = df["units"].fillna(0)
-    df["revenue"] = df["revenue"].fillna(0)
+def build_category(plp_file: str, pdp_file: str, product_type: str) -> pd.DataFrame:
+    """Combos and hampers: GA4 only — no price, no launch date, no order extract.
 
-    # A SKU created after the window opened cannot have accumulated a fair
-    # history. Flagged so the viewer can route it to the cold-start default
-    # instead of scoring it at zero.
-    df["is_new"] = df["created"] > WINDOW_START
-    # PRD slot N: launched within `new_arrival_days` of the window end.
-    df["is_new_arrival"] = df["created"] > (WINDOW_END - pd.Timedelta(days=NEW_ARRIVAL_DAYS))
+    Both extracts repeat every row several times; the duplicates are identical,
+    so dropping them is safe. Rows with no Item ID cannot be joined to anything
+    and are dropped with a notice.
+    """
+    plp = _read(plp_file).drop_duplicates()
+    pdp = _read(pdp_file).drop_duplicates()
 
-    # Stock status is not in any extract yet. Defaulting to in-stock keeps the
-    # pipeline running; the viewer flags that the three stock rules are untested.
-    if "in_stock" not in df:
-        df["in_stock"] = True
+    missing_id = plp["Item ID"].isna().sum()
+    if missing_id:
+        print(f"  {product_type}: dropped {missing_id} row(s) with no Item ID "
+              f"({', '.join(plp[plp['Item ID'].isna()]['Item name'].unique()[:3])})")
+    plp = plp[plp["Item ID"].notna()].copy()
+    plp["guid"] = plp["Item ID"].astype(int)
 
-    # ---- Peer median price (M6 benchmark) ---------------------------------
-    # Median, not mean: one Rs 45,045 SKU drags the Bunches mean to Rs 2,395
-    # against a median of Rs 995, which would mark 70% of the group
-    # "below average" and flatten the modifier.
+    plp = plp.rename(columns={
+        "PLP Views": "plpViews", "PLP Clicks": "plpClicks", "PLP ATC": "plpAtc",
+        "Item name": "title",
+    })
+    plp = plp.drop_duplicates("guid")
+
+    pdp = pdp.drop_duplicates("Item name").copy()
+    pdp["nm"] = norm_name(pdp["Item name"])
+    plp["nm"] = norm_name(plp["title"])
+    pdp = pdp.rename(columns={
+        "PDP Views": "pdpViews", "PDP ATC": "pdpAtc", "PDP Purchase": "orders",
+    })
+
+    df = plp[["guid", "title", "nm", "plpViews", "plpClicks", "plpAtc"]].merge(
+        pdp[["nm", "pdpViews", "pdpAtc", "orders"]], on="nm", how="left"
+    )
+    df["productType"] = product_type
+    df["price"] = np.nan          # not in any extract yet
+    df["created"] = pd.NaT
+    df["sku"] = None
+    df["url"] = None
+    df["on_page"] = True
+    df["currentIndex"] = np.nan
+    df["revenue"] = np.nan        # no revenue source for these pools
+    return df.drop(columns=["nm"])
+
+
+def build() -> dict:
+    flowers = build_flowers()
+    combos = build_category(
+        "plp_combos.csv", "pdp_combos.csv", "Combo")
+    hampers = build_category(
+        "plp_hampers.csv", "pdp_hampers.csv", "Hamper")
+
+    df = pd.concat([flowers, combos, hampers], ignore_index=True)
+
+    dupes = df[df["guid"].duplicated(keep=False)]["guid"].unique()
+    if len(dupes):
+        sys.exit(f"duplicate GUID across pools, would place a product twice: {list(dupes)[:5]}")
+
+    for col in ("plpViews", "plpClicks", "plpAtc", "pdpViews", "pdpAtc", "orders"):
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    # Stock is not in any extract. Defaulting to in-stock keeps the pipeline
+    # running; the viewer flags that the three stock rules are untested.
+    df["inStock"] = True
+
     live = df[df["on_page"]]
-    peer_median = live.groupby("peer_group")["price"].median().to_dict()
-    page_median = float(live["price"].median())
-
-    # ---- Page-level pooled rates (smoothing priors) -----------------------
     priors = {
-        "m1": float(live["plp_clicks"].sum() / live["plp_views"].sum()),
-        "m2": float(live["plp_atc"].sum() / live["plp_clicks"].sum()),
-        "m4": float(live["pdp_atc"].sum() / live["pdp_views"].sum()),
+        "ctr": float(live["plpClicks"].sum() / max(live["plpViews"].sum(), 1)),
+        "atc": float(live["pdpAtc"].sum() / max(live["plpClicks"].sum(), 1)),
+        "conversion": float(live["orders"].sum() / max(live["plpClicks"].sum(), 1)),
     }
 
     records = []
@@ -210,53 +176,38 @@ def build() -> dict:
         records.append({
             "guid": int(r.guid),
             "title": r.title,
-            "sku": r.sku,
-            "url": r.url,
-            "price": int(r.price),
-            "mrp": int(r.mrp),
-            "peerGroup": r.peer_group,
-            "peerRaw": r.peer_raw,
-            "peerMedian": float(peer_median.get(r.peer_group, page_median)),
-            "onPage": bool(r.on_page),
-            "isNew": bool(r.is_new),
-            "isNewArrival": bool(r.is_new_arrival),
-            "inStock": bool(r.in_stock),
-            "bestSeller": int(r.best_seller),
+            "sku": r.sku if isinstance(r.sku, str) else None,
+            "url": r.url if isinstance(r.url, str) else None,
+            "productType": r.productType,
+            "price": None if pd.isna(r.price) else int(r.price),
             "created": r.created.strftime("%Y-%m-%d") if pd.notna(r.created) else None,
-            "currentIndex": int(r.current_index) if pd.notna(r.current_index) else None,
-            "plpViews": int(r.plp_views or 0),
-            "plpClicks": int(r.plp_clicks or 0),
-            "plpAtc": int(r.plp_atc or 0),
-            "pdpViews": int(r.pdp_views or 0),
-            "pdpAtc": int(r.pdp_atc or 0),
-            "pdpPurchase": int(r.pdp_purchase or 0),
+            "onPage": bool(r.on_page),
+            "inStock": bool(r.inStock),
+            "currentIndex": None if pd.isna(r.currentIndex) else int(r.currentIndex),
+            "plpViews": int(r.plpViews), "plpClicks": int(r.plpClicks), "plpAtc": int(r.plpAtc),
+            "pdpViews": int(r.pdpViews), "pdpAtc": int(r.pdpAtc),
             "orders": int(r.orders),
-            "units": int(r.units),
-            "revenue": float(r.revenue),
-            "lastOrder": r.last_order_date.strftime("%Y-%m-%d") if pd.notna(r.last_order_date) else None,
-            "daysSinceOrder": int(r.days_since_order) if pd.notna(r.days_since_order) else None,
+            "revenue": None if pd.isna(r.revenue) else float(r.revenue),
         })
 
-    records.sort(key=lambda x: (x["currentIndex"] is None, x["currentIndex"]))
-
+    counts = df["productType"].value_counts().to_dict()
     payload = {
         "meta": {
             "page": "/all-flowers",
-            "generated": AS_OF.strftime("%Y-%m-%d"),
+            "generated": WINDOW_END.strftime("%Y-%m-%d"),
             "windowStart": WINDOW_START.strftime("%Y-%m-%d"),
             "windowEnd": WINDOW_END.strftime("%Y-%m-%d"),
             "windowConfirmed": False,
-            "skuCount": len(records),
-            "liveSkuCount": int(df["on_page"].sum()),
-            "totalFlowerOrders": total_orders,
-            "pagePriors": priors,
-            "pageMedianPrice": page_median,
-            "peerMedians": {k: float(v) for k, v in peer_median.items()},
-            "peerCounts": live["peer_group"].value_counts().to_dict(),
-            "minPeerGroup": MIN_PEER_GROUP,
-            "config": _CFG,
             "stockDataAvailable": False,
-            "newArrivalCount": int(df["is_new_arrival"].sum()),
+            "skuCount": len(records),
+            "poolCounts": counts,
+            "pagePriors": priors,
+            "sources": {
+                "Flower": "/all-flowers",
+                "Combo": "/combos/flowers-and-cakes",
+                "Hamper": "/hampers/same-day-delivery",
+            },
+            "config": CFG,
         },
         "products": records,
     }
@@ -270,7 +221,8 @@ if __name__ == "__main__":
     OUT.write_text(blob)
     OUT_JS.write_text("window.WSM_DATA=" + blob + ";")
     m = payload["meta"]
-    print(f"Wrote {OUT.relative_to(ROOT)}")
-    print(f"  {m['skuCount']} SKUs ({m['liveSkuCount']} live) | window {m['windowStart']} .. {m['windowEnd']}")
-    print(f"  M3 denominator: {m['totalFlowerOrders']:,} flower orders")
-    print(f"  priors: M1 {m['pagePriors']['m1']:.4f}  M2 {m['pagePriors']['m2']:.4f}  M4 {m['pagePriors']['m4']:.4f}")
+    print(f"Wrote {OUT.relative_to(ROOT)} and {OUT_JS.relative_to(ROOT)}")
+    print(f"  {m['skuCount']} products: " + ", ".join(f"{v} {k.lower()}s" for k, v in m["poolCounts"].items()))
+    print(f"  flower order window {m['windowStart']} .. {m['windowEnd']}")
+    print(f"  priors: CTR {m['pagePriors']['ctr']:.4f}  ATC {m['pagePriors']['atc']:.4f}  "
+          f"conversion {m['pagePriors']['conversion']:.4f}")

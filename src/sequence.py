@@ -1,48 +1,62 @@
 """
-Listing Page Product Sequencing — reference implementation.
+Listing Page Product Sequencing — reference implementation (v3).
 
-Two stages, matching the PRD:
+Built to the tiering and page order in "FA Listing Sequence Algorithm":
 
-    Step 1  score()      every product gets a 0-1 score from four signals
-    Step 2  allocate()   products are dealt into a repeating 10-slot template
+    Step 1  score()     every product gets a 0-1 score from four signals
+    Step 2  allocate()  products are dealt into a repeating 30-slot template
+    Step 3              the same template continues to the end of the catalogue
 
-The viewer (docs/index.html) reimplements both in JavaScript so the weights and
-the template can be changed live; tests/test_parity.py asserts the two agree.
+The viewer (docs/index.html) reimplements both in JavaScript so weights and the
+template can be changed live; tests/test_sequence.py asserts the two agree.
 
-SCORING (Step 1)
-    CTR             PLP clicks / PLP impressions        35%
-    ATC PDP rate    PDP add-to-cart / PDP views         25%
-    Conversion      orders / PLP clicks                 20%
-    Orders          order count                         20%
+SCORING
+    CTR          clicks / impressions          35%
+    ATC rate     add-to-carts / clicks         25%
+    Conversion   orders / clicks               20%
+    Orders       order count                   20%
 
-All four are normalised 0-1 across the page before weighting, because they are
+The two "/ clicks" denominators are what the PRD specifies. They are a
+configurable switch because on this data they misbehave: combos and hampers are
+measured on their own category pages, their orders arrive largely through routes
+that never touched the listing, and 18 of 122 have no clicks at all. Smoothing
+and the impression floor contain the damage; `denominators` lets you see what
+PDP views would do instead.
+
+Each signal is normalised 0-1 across the page before weighting, because they are
 rates on very different scales and summing them raw would let one dominate
-through its units alone. The three ratios are first shrunk toward the page's
-pooled rate in proportion to how little traffic supports them — otherwise a SKU
-with 5 clicks and 2 add-to-carts posts a 40% rate and outranks real performers.
+through its units alone.
 
-SLOTTING (Step 2/3)
-    The page is dealt in batches of 10. Each position in a batch has a slot type
-    and each type draws the highest-scoring unplaced product from its pool:
+SLOTTING
+    Seven buckets, 30 slots, repeating:
 
-        M  medium price band      H  high price band
-        N  new arrival            F  featured, from the boost list
+        L  M  C  L  U  P  M  L  H  C
+        U  L  P  M  V  L  C  U  P  M
+        L  H  C  U  P  M  V  L  C  P
 
-    Pools are finite. When one empties the slot falls through `fallback_chain`,
-    which is what lets the strict price band govern the top of the page (where
-    the mix matters) while still guaranteeing every product is placed exactly
-    once. LOW is the implicit band below M — products cheaper than M.min, which
-    belong to no band the PRD names.
+    L/M/U/H/V are price bands, C is combos, P is hampers. Each slot takes the
+    highest-scoring unclaimed product from its bucket. A product is claimed by
+    the first bucket in `precedence` it qualifies for, which is what guarantees
+    one-SKU-one-placement.
+
+    Pools are finite. The PRD says an empty pool borrows from a later batch,
+    which cannot terminate once a pool is globally exhausted and leaves a hole
+    that cascades. Instead a price slot falls through to the nearest band by
+    price, then to the best remaining product of any bucket.
 
     Out-of-stock products are barred from the first N positions and sink to the
     end of the page.
+
+BOOSTS
+    Up to four per 30-slot set, inserted at configured positions AFTER the base
+    set is built. They sit outside the 30, so a set with x insertions displays
+    30+x products and the base order never changes.
 """
 
 from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -51,19 +65,31 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "config" / "config.json"
 
-SIGNALS = ("ctr", "atc_pdp", "conversion", "orders")
+SIGNALS = ("ctr", "atc", "conversion", "orders")
 
 
 def load_config(path: Path | str = CONFIG_PATH) -> dict:
     cfg = json.loads(Path(path).read_text())
+
     total = sum(cfg["weights"][s] for s in SIGNALS)
     if abs(total - 1.0) > 1e-6:
         raise ValueError(f"weights must sum to 1.0, got {total}")
-    for name, chain in cfg["fallback_chain"].items():
-        if name.startswith("_"):
-            continue
-        if not chain or chain[0] != name:
-            raise ValueError(f"fallback_chain[{name}] must start with {name!r}")
+
+    slots = sum(b["slots"] for b in cfg["buckets"].values())
+    if slots != len(cfg["template"]):
+        raise ValueError(f"bucket slots total {slots} but template has {len(cfg['template'])} positions")
+
+    counted = pd.Series(cfg["template"]).value_counts().to_dict()
+    for key, b in cfg["buckets"].items():
+        if counted.get(key, 0) != b["slots"]:
+            raise ValueError(
+                f"bucket {key} declares {b['slots']} slots but appears {counted.get(key, 0)} times in the template"
+            )
+
+    missing = set(cfg["buckets"]) - set(cfg["precedence"])
+    if missing:
+        raise ValueError(f"precedence is missing bucket(s): {sorted(missing)}")
+
     return cfg
 
 
@@ -72,19 +98,36 @@ def load_config(path: Path | str = CONFIG_PATH) -> dict:
 # --------------------------------------------------------------------------
 
 def smooth(successes: pd.Series, trials: pd.Series, prior: float, k: float) -> pd.Series:
-    trials = trials.fillna(0).astype(float)
-    successes = successes.fillna(0).astype(float)
+    """Shrink a ratio toward `prior`, weighted by k pseudo-observations.
+
+    The phantom product is k trials AND k*prior successes — padding only the
+    denominator would drag every product toward zero rather than the average.
+    """
+    trials = pd.to_numeric(trials, errors="coerce").fillna(0).astype(float)
+    successes = pd.to_numeric(successes, errors="coerce").fillna(0).astype(float)
     if k <= 0:
         return (successes / trials.replace(0, np.nan)).fillna(prior)
     return (successes + k * prior) / (trials + k)
 
 
 def minmax(s: pd.Series) -> pd.Series:
-    s = s.astype(float)
+    s = pd.to_numeric(s, errors="coerce").fillna(0).astype(float)
     lo, hi = s.min(), s.max()
     if hi == lo:
         return pd.Series(0.5, index=s.index)
     return (s - lo) / (hi - lo)
+
+
+def percentile(s: pd.Series) -> pd.Series:
+    return pd.to_numeric(s, errors="coerce").fillna(0).rank(pct=True)
+
+
+def normalise(s: pd.Series, method: str) -> pd.Series:
+    return percentile(s) if method == "percentile" else minmax(s)
+
+
+def _denominator(df: pd.DataFrame, which: str) -> pd.Series:
+    return df["plpClicks"] if which == "clicks" else df["pdpViews"]
 
 
 def score(products: pd.DataFrame, cfg: dict) -> pd.DataFrame:
@@ -92,82 +135,96 @@ def score(products: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     df = products.copy()
     k = cfg["smoothing_k"]
     w = cfg["weights"]
+    dn = cfg["denominators"]
+    method = cfg.get("normalisation", "minmax")
+
+    atc_d = _denominator(df, dn["atc"])
+    cvr_d = _denominator(df, dn["conversion"])
 
     pooled_ctr = df["plpClicks"].sum() / max(df["plpViews"].sum(), 1)
-    pooled_atc = df["pdpAtc"].sum() / max(df["pdpViews"].sum(), 1)
-    pooled_cvr = df["orders"].sum() / max(df["plpClicks"].sum(), 1)
+    pooled_atc = df["pdpAtc"].sum() / max(atc_d.sum(), 1)
+    pooled_cvr = df["orders"].sum() / max(cvr_d.sum(), 1)
 
     df["ctr_raw"] = smooth(df["plpClicks"], df["plpViews"], pooled_ctr, k)
-    df["atc_pdp_raw"] = smooth(df["pdpAtc"], df["pdpViews"], pooled_atc, k / 10)
-    df["conversion_raw"] = smooth(df["orders"], df["plpClicks"], pooled_cvr, k / 30)
-    df["orders_raw"] = df["orders"].fillna(0).astype(float)
+    df["atc_raw"] = smooth(df["pdpAtc"], atc_d, pooled_atc, k / 10)
+    df["conversion_raw"] = smooth(df["orders"], cvr_d, pooled_cvr, k / 30)
+    df["orders_raw"] = pd.to_numeric(df["orders"], errors="coerce").fillna(0).astype(float)
 
-    # Normalised values live in `<signal>_n`, never in `<signal>` — writing them
-    # back onto the source column would destroy the raw `orders` count that the
-    # table, the CSV and the KPIs all read.
+    # Normalised values live in `<signal>_n`, never back on the source column —
+    # writing them onto `orders` would destroy the raw count the table and the
+    # CSV read.
     for s in SIGNALS:
-        df[f"{s}_n"] = minmax(df[f"{s}_raw"])
+        df[f"{s}_n"] = normalise(df[f"{s}_raw"], method)
 
     df["score"] = sum(df[f"{s}_n"] * w[s] for s in SIGNALS)
+
+    # Below the floor a product has not been seen enough for its own rates to
+    # mean anything. It takes the median score of its own bucket instead, so a
+    # thin combo is judged against combos rather than against the whole page.
+    floor = cfg["impression_floor"]
+    df["below_floor"] = pd.to_numeric(df["plpViews"], errors="coerce").fillna(0) < floor
+    if df["below_floor"].any():
+        df = assign_buckets(df, cfg)
+        med = df[~df["below_floor"]].groupby("bucket")["score"].median()
+        page_med = df.loc[~df["below_floor"], "score"].median()
+        if pd.isna(page_med):
+            page_med = df["score"].median()
+        df.loc[df["below_floor"], "score"] = (
+            df.loc[df["below_floor"], "bucket"].map(med).fillna(page_med)
+        )
+
     return df
 
 
 # --------------------------------------------------------------------------
-# Step 2/3 — slot allocation
+# Step 2/3 — bucket allocation
 # --------------------------------------------------------------------------
 
-def assign_bands(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Tag each product with its price band: LOW, M or H."""
-    bands = cfg["price_bands"]
-    m_min, m_max = bands["M"]["min"], bands["M"]["max"]
-    h_min = bands["H"]["min"]
-
+def assign_buckets(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Claim each product for the first bucket in `precedence` it qualifies for."""
     df = df.copy()
-    band = pd.Series("LOW", index=df.index)
-    band[df["price"].between(m_min, m_max)] = "M"
-    band[df["price"] >= h_min] = "H"
-    df["band"] = band
+    bucket = pd.Series(pd.NA, index=df.index, dtype="object")
+    price = pd.to_numeric(df.get("price"), errors="coerce")
+
+    for key in cfg["precedence"]:
+        spec = cfg["buckets"][key]
+        if spec["kind"] == "category":
+            ok = df["productType"].astype(str).str.lower() == str(spec["value"]).lower()
+        else:
+            lo = spec["min"]
+            hi = spec["max"]
+            ok = price.notna() & (price >= lo)
+            if hi is not None:
+                ok &= price <= hi
+        bucket = bucket.where(bucket.notna(), pd.Series(np.where(ok, key, pd.NA), index=df.index))
+
+    df["bucket"] = bucket
     return df
 
 
-def new_arrival_flags(df: pd.DataFrame, cfg: dict) -> pd.Series:
-    """Recompute the N pool from `created` so new_arrival_days stays a live knob.
-
-    The build bakes an `isNewArrival` column at one fixed horizon; reading that
-    column here would silently ignore any change to new_arrival_days.
-    """
-    cutoff = pd.Timestamp(cfg["window"]["end"]) - pd.Timedelta(days=cfg["new_arrival_days"])
-    created = pd.to_datetime(df["created"], errors="coerce")
-    manual = set(cfg["manual_new"]["guids"])
-    return (created > cutoff).fillna(False) | df["guid"].isin(manual)
+def _price_order(cfg: dict) -> list[str]:
+    bands = [(k, v) for k, v in cfg["buckets"].items() if v["kind"] == "price"]
+    bands.sort(key=lambda kv: kv[1]["min"])
+    return [k for k, _ in bands]
 
 
-def build_template(n_batches: int, cfg: dict) -> list[list[str]]:
-    t = cfg["templates"]
-    out = []
-    for i in range(n_batches):
-        if i == 0:
-            out.append(list(t["batch_1"]))
-        elif i == 1:
-            out.append(list(t["batch_2"]))
-        else:
-            out.append(list(t["batch_default"]))
-    return out
+def fallback_chain(key: str, cfg: dict) -> list[str]:
+    """Nearest price band outward, then anything. C and P go straight to anything."""
+    spec = cfg["buckets"][key]
+    if spec["kind"] != "price":
+        return [key, "*"]
+    order = _price_order(cfg)
+    i = order.index(key)
+    rest = sorted(
+        [b for b in order if b != key],
+        key=lambda b: (abs(order.index(b) - i), order.index(b)),
+    )
+    return [key] + rest + ["*"]
 
 
-@dataclass
-class Placement:
-    position: int
-    batch: int
-    slot: str          # the slot the template asked for
-    filled_by: str     # the pool it was actually drawn from
-    guid: int
-    fallback: bool
-
-
-def allocate(scored: pd.DataFrame, cfg: dict, seed: int = 7) -> pd.DataFrame:
-    """Deal every product into the slot template. Returns one row per product."""
-    df = assign_bands(scored, cfg).copy()
+def allocate(scored: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Deal every product into the repeating template. One row per product."""
+    df = assign_buckets(scored, cfg).copy()
     rules = cfg["rules"]
     top_n = rules["exclude_out_of_stock_from_top_n"]
 
@@ -175,63 +232,47 @@ def allocate(scored: pd.DataFrame, cfg: dict, seed: int = 7) -> pd.DataFrame:
         df["inStock"] = True
     df["inStock"] = df["inStock"].fillna(True).astype(bool)
 
-    boost = set(cfg["boost_list"]["guids"])
-    df["isBoost"] = df["guid"].isin(boost)
-    df["isNew"] = new_arrival_flags(df, cfg)
-
-    # A boosted SKU is held out of the ordinary price pools, otherwise an M slot
-    # takes it before its F seat comes round — the boost buys nothing and the F
-    # seat falls back. It rejoins the general pools only once every F seat the
-    # template asks for has been dealt.
-    reserve = cfg["rules"].get("reserve_boost_for_f", True)
-
-    order = df.sort_values("score", ascending=False)
-    held = boost if reserve else set()
-    pools: dict[str, list[int]] = {
-        "M": [g for g, b in zip(order["guid"], order["band"]) if b == "M" and g not in held],
-        "H": [g for g, b in zip(order["guid"], order["band"]) if b == "H" and g not in held],
-        "LOW": [g for g, b in zip(order["guid"], order["band"]) if b == "LOW" and g not in held],
-        "N": [g for g, n in zip(order["guid"], order["isNew"]) if n and g not in held],
+    order = df.sort_values(
+        ["score", "orders_raw", "plpViews", "guid"], ascending=[False, False, False, True]
+    )
+    pools: dict[str, list] = {
+        key: [g for g, b in zip(order["guid"], order["bucket"]) if b == key]
+        for key in cfg["buckets"]
     }
-    # The F pool is a random draw from the boost list, not a score sort — but it
-    # must be stable for a given seed so the slot does not change on refresh
-    # within a session (requirement 6).
-    rng = np.random.default_rng(seed)
-    f_pool = [g for g in order["guid"] if g in boost]
-    rng.shuffle(f_pool)
-    pools["F"] = f_pool
+    # "*" is every product, used only once a slot's own chain is exhausted.
+    pools["*"] = list(order["guid"])
 
+    by = {r.guid: r for r in df.itertuples(index=False)}
+    placed: set = set()
     in_stock = set(df.loc[df["inStock"], "guid"])
-    placed: set[int] = set()
-    chains = {k: v for k, v in cfg["fallback_chain"].items() if not k.startswith("_")}
 
-    def take(slot: str, position: int) -> tuple[int, str, bool] | None:
-        """Pull the best unplaced product for this slot, following the chain."""
-        for depth, pool_name in enumerate(chains.get(slot, [slot])):
-            pool = pools.get(pool_name, [])
+    def take(slot: str, position: int):
+        for depth, name in enumerate(fallback_chain(slot, cfg)):
+            pool = pools.get(name, [])
             while pool:
                 guid = pool[0]
                 if guid in placed:
                     pool.pop(0)
                     continue
-                # Requirement 3: out-of-stock never appears in the top N.
                 if position <= top_n and guid not in in_stock:
-                    # Leave it in the pool for a later position; scan past it.
                     nxt = next((g for g in pool if g not in placed and g in in_stock), None)
                     if nxt is None:
                         break
                     guid = nxt
                 pool.remove(guid)
                 placed.add(guid)
-                return guid, pool_name, depth > 0
+                return guid, name, depth > 0
         return None
 
-    n_batches = math.ceil(len(df) / 10)
-    rows: list[Placement] = []
+    template = cfg["template"]
+    rows = []
     position = 0
+    set_no = 0
 
-    for b, batch in enumerate(build_template(n_batches, cfg)):
-        for slot in batch:
+    while len(placed) < len(df):
+        set_no += 1
+        progressed = False
+        for slot in template:
             if len(placed) >= len(df):
                 break
             position += 1
@@ -239,49 +280,93 @@ def allocate(scored: pd.DataFrame, cfg: dict, seed: int = 7) -> pd.DataFrame:
             if got is None:
                 position -= 1
                 continue
-            guid, pool_name, was_fallback = got
-            rows.append(Placement(position, b + 1, slot, pool_name, guid, was_fallback))
+            guid, from_pool, was_fallback = got
+            progressed = True
+            rows.append({
+                "position": position, "set": set_no, "slot": slot,
+                "filled_by": from_pool, "fallback": was_fallback, "guid": guid,
+            })
+        if not progressed:
+            break
 
-    # Any boosted SKU that never got an F seat rejoins the tail by score, along
-    # with anything the template could not consume (pools emptied unevenly).
-    # Out-of-stock products sink below everything afterwards.
-    leftover = [g for g in order["guid"] if g not in placed]
-    for guid in leftover:
-        position += 1
-        rows.append(Placement(position, (position - 1) // 10 + 1, "-", "overflow", guid, True))
-
-    out = pd.DataFrame([r.__dict__ for r in rows])
-    out = out.merge(df, on="guid", how="left")
+    out = pd.DataFrame(rows).merge(df, on="guid", how="left")
 
     if rules["out_of_stock_to_end"]:
         out = out.sort_values(["inStock", "position"], ascending=[False, True])
         out["position"] = range(1, len(out) + 1)
-        out["batch"] = (out["position"] - 1) // 10 + 1
+        out["set"] = (out["position"] - 1) // len(template) + 1
 
     return out.reset_index(drop=True)
 
 
+def apply_boosts(base: pd.DataFrame, catalogue: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Insert boosted SKUs at configured positions, outside the base sequence.
+
+    Each insertion adds a product rather than replacing one, so a set carrying x
+    insertions shows 30+x. The relative order of the base products is untouched.
+    """
+    entries = [e for e in cfg["boost"]["entries"] if not str(e.get("guid", "")).startswith("_")]
+    base = base.copy()
+    base["boost"] = False
+    if not entries:
+        return base
+
+    size = len(cfg["template"])
+    per_set = cfg["boost"]["max_per_set"]
+
+    # The template deals the whole catalogue, so a boosted SKU is already
+    # somewhere on the page. It is LIFTED from that natural position and
+    # re-inserted at the configured one — which is what makes a set carry 30+x
+    # while every SKU still appears exactly once (requirement 2). The products
+    # it jumps keep their relative order.
+    rows = {r["guid"]: r for r in base.to_dict("records")}
+
+    entries = sorted(entries, key=lambda e: (e.get("priority", 999), entries.index(e)))
+
+    accepted, used_per_set, lifted = [], {}, set()
+    for e in entries:
+        guid = e["guid"]
+        row = rows.get(guid)
+        if row is None or guid in lifted:
+            continue                                   # not on the page, or already boosted
+        if not bool(row.get("inStock", True)):
+            continue                                   # out of stock never gets a boost
+        pos = int(e["position"])
+        s = (pos - 1) // size
+        if used_per_set.get(s, 0) >= per_set:
+            continue                                   # that set already has its four
+        used_per_set[s] = used_per_set.get(s, 0) + 1
+        lifted.add(guid)
+        accepted.append((pos, guid))
+
+    if not accepted:
+        return base
+
+    seq = [r for r in base.sort_values("position").to_dict("records") if r["guid"] not in lifted]
+
+    for pos, guid in sorted(accepted, key=lambda t: t[0], reverse=True):
+        row = dict(rows[guid])
+        row.update({"slot": "F", "filled_by": "boost", "fallback": False, "boost": True})
+        seq.insert(min(max(pos - 1, 0), len(seq)), row)
+
+    out = pd.DataFrame(seq)
+    out["position"] = range(1, len(out) + 1)
+    out["set"] = (out["position"] - 1) // size + 1
+    return out.reset_index(drop=True)
+
+
 def pool_report(scored: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Supply vs demand per slot type — the check that tells you the template fits."""
-    df = assign_bands(scored, cfg)
-    is_new = new_arrival_flags(df, cfg)
-
-    n_batches = math.ceil(len(df) / 10)
-    demand: dict[str, int] = {}
-    for batch in build_template(n_batches, cfg):
-        for slot in batch:
-            demand[slot] = demand.get(slot, 0) + 1
-
-    supply = {
-        "M": int((df["band"] == "M").sum()),
-        "H": int((df["band"] == "H").sum()),
-        "N": int(is_new.sum()),
-        "F": len(cfg["boost_list"]["guids"]),
-        "LOW": int((df["band"] == "LOW").sum()),
-    }
-    rows = [
-        {"slot": s, "supply": supply.get(s, 0), "demand": demand.get(s, 0),
-         "shortfall": max(demand.get(s, 0) - supply.get(s, 0), 0)}
-        for s in ("M", "H", "N", "F", "LOW")
-    ]
+    """Supply against the seats the template asks for, per bucket."""
+    df = assign_buckets(scored, cfg)
+    n_sets = math.ceil(len(df) / len(cfg["template"]))
+    rows = []
+    for key, spec in cfg["buckets"].items():
+        supply = int((df["bucket"] == key).sum())
+        demand = spec["slots"] * n_sets
+        rows.append({
+            "bucket": key, "label": spec["label"], "slots_per_set": spec["slots"],
+            "supply": supply, "demand": demand,
+            "shortfall": max(demand - supply, 0),
+            "sets_covered": supply // spec["slots"] if spec["slots"] else 0,
+        })
     return pd.DataFrame(rows)

@@ -1,56 +1,68 @@
 {
-  "_comment": "Everything the category team can change without a deploy. Requirement 8.",
+  "_comment": "Listing Page Product Sequencing — v3. Built to the tiering + page order in 'FA Listing Sequence Algorithm'. Everything here is changeable without a deploy.",
+  "algo_version": "v3.0",
 
   "window": {
     "days": 30,
-    "end": "2026-09-22",
-    "_note": "PRD specifies the trailing 30 days. Sales data currently ends 22 Sep 2026, so the window is the last 30 days of available data, not of the calendar. Move `end` forward when fresher extracts land."
+    "flowers_orders_end": "2026-09-22",
+    "_note": "Flower orders are sliced to the 30 days ending 22 Sep 2026. The GA4 extracts for flowers, combos and hampers each arrived without a stated range and are assumed to match. Combo and hamper orders come from PDP Purchase, whose window is also unstated. Confirm before quoting figures."
   },
+
+  "refresh_days": 7,
 
   "weights": {
     "ctr": 0.35,
-    "atc_pdp": 0.25,
+    "atc": 0.25,
     "conversion": 0.20,
     "orders": 0.20
   },
 
+  "denominators": {
+    "atc": "clicks",
+    "conversion": "clicks",
+    "_note": "The PRD defines both as '÷ clicks', which is what is set here. Switch either to 'pdp_views' in the viewer to see the effect: 15 hampers and 3 combos have zero PLP clicks, and among those that do, rates above 100% are common because orders and add-to-carts arrive from routes that never touched this listing."
+  },
+
+  "normalisation": "minmax",
   "smoothing_k": 3000,
+  "impression_floor": 100,
+  "_floor_note": "A product below this many impressions is not scored on its own rates; it takes the median score of its own bucket. Without it, smoothing hands a no-data product the page-average rate and it outranks products with real measured performance.",
 
-  "price_bands": {
-    "M": { "min": 750, "max": 1200, "label": "Medium" },
-    "H": { "min": 1201, "max": null, "label": "High" }
+  "buckets": {
+    "L": { "label": "Under ₹1,000",  "kind": "price",    "min": 0,    "max": 999,  "slots": 7 },
+    "M": { "label": "₹1,000–1,499",  "kind": "price",    "min": 1000, "max": 1499, "slots": 5 },
+    "U": { "label": "₹1,500–1,999",  "kind": "price",    "min": 1500, "max": 1999, "slots": 4 },
+    "H": { "label": "₹2,000–2,499",  "kind": "price",    "min": 2000, "max": 2499, "slots": 2 },
+    "V": { "label": "Above ₹2,500",  "kind": "price",    "min": 2500, "max": null, "slots": 2 },
+    "C": { "label": "Combo",         "kind": "category", "value": "Combo",         "slots": 5 },
+    "P": { "label": "Hamper",        "kind": "category", "value": "Hamper",        "slots": 5 }
   },
+  "_band_note": "The PRD says 'Above ₹2500', which leaves a product priced exactly ₹2,500 in no bucket. Set to >= 2500 here to close it. Nothing is priced there today.",
 
-  "new_arrival_days": 30,
+  "template": [
+    "L", "M", "C", "L", "U", "P", "M", "L", "H", "C",
+    "U", "L", "P", "M", "V", "L", "C", "U", "P", "M",
+    "L", "H", "C", "U", "P", "M", "V", "L", "C", "P"
+  ],
+  "_template_note": "30 positions, repeating every batch per the PRD. Counts: L 7, M 5, U 4, H 2, V 2, C 5, P 5 = 30.",
 
-  "templates": {
-    "batch_1": ["M", "M", "H", "M", "F", "M", "N", "M", "H", "M"],
-    "batch_2": ["M", "M", "H", "M", "F", "M", "N", "M", "H", "M"],
-    "batch_default": ["M", "M", "H", "M", "F", "M", "N", "M", "M", "M"]
-  },
+  "precedence": ["C", "P", "V", "H", "U", "M", "L"],
+  "_precedence_note": "A SKU is claimed by the first bucket it qualifies for and removed from the rest, so it appears once. Combo and Hamper outrank price bands.",
 
-  "fallback_chain": {
-    "_comment": "When a slot's pool is exhausted, try these in order. Keeps the strict price band governing the top of the page while guaranteeing every SKU gets placed. Requirement 4, extended.",
-    "M": ["M", "LOW", "H"],
-    "H": ["H", "M", "LOW"],
-    "N": ["N", "M", "LOW", "H"],
-    "F": ["F", "M", "LOW", "H"]
-  },
+  "fallback": "nearest_then_best",
+  "_fallback_note": "The PRD says an empty pool borrows from a later batch, which cannot terminate once a pool is globally exhausted. Instead: a price slot falls through to the nearest band by price, then to the best remaining product of any bucket. C and P fall straight through to best remaining.",
 
-  "boost_list": {
-    "_comment": "F slot. SKU GUIDs, manually curated by the category team. Empty list means F falls back per fallback_chain (requirement 7).",
-    "guids": []
-  },
-
-  "manual_new": {
-    "_comment": "N slot. GUIDs force-treated as new arrivals regardless of launch date, so the team can seed the N pool when genuine launches run dry. Merged with the automatic last-30-days pool.",
-    "guids": []
+  "boost": {
+    "_comment": "Up to 4 insertions per 30-slot set, sitting OUTSIDE the 30 — a set with x insertions displays 30+x. Base order is never changed. A SKU already placed is skipped, as is an out-of-stock one. Empty list means no insertions, per requirement 7.",
+    "max_per_set": 4,
+    "index_is": "before",
+    "_index_note": "position 5 means the boost becomes the new #5 and the previous #5 shifts to #6.",
+    "entries": []
   },
 
   "rules": {
     "exclude_out_of_stock_from_top_n": 10,
     "out_of_stock_to_end": true,
-    "f_slot_stable_within_session": true,
-    "reserve_boost_for_f": true
+    "min_scored_products": 20
   }
 }
